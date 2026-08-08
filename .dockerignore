@@ -1,0 +1,12 @@
+.env
+.git
+.idea
+.pytest_cache
+.venv
+.runtime
+models
+data
+result.mp4
+__pycache__
+tests
+examples

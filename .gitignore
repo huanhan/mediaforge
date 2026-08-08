@@ -1,0 +1,15 @@
+.env
+.idea/
+.pytest_cache/
+.ruff_cache/
+.venv/
+.runtime/
+models/
+data/
+result.mp4
+matrix-results/
+__pycache__/
+*.py[cod]
+dist/
+build/
+*.egg-info/
