@@ -58,7 +58,7 @@ uv run minimaxh3
 Invoke-RestMethod http://127.0.0.1:8000/readyz | ConvertTo-Json -Depth 6
 ```
 
-就绪响应应包含 `"backend": "native"`、`"status": "ready"` 和 CUDA 设备信息。服务在第一次生成时才加载大模型。
+就绪响应应包含 `"backend": "native"`、`"status": "ready"` 和 CUDA 设备信息。服务在第一次生成时才加载大模型；完成任务后默认空闲 5 秒释放模型，下次生成时重新加载。`"models_loaded"` 可用于查看模型权重是否当前驻留。
 
 ## 文本生成视频
 
@@ -124,6 +124,7 @@ curl.exe -X POST http://127.0.0.1:8000/v1/files -F "kind=image" -F "file=@first.
 | `H3_VRAM_MODE` | `dynamic` | `dynamic`、`lowvram`、`novram`、`highvram` 或 `cpu` |
 | `H3_RESERVE_VRAM_GB` | `1.0` | 为桌面和其他程序预留的显存 |
 | `H3_MAX_QUEUE_SIZE` | `8` | 最大排队任务数 |
+| `H3_IDLE_RELEASE_SECONDS` | `5.0` | 完成任务后无新任务多久释放模型 |
 | `H3_API_KEY` | 空 | 可选 API Key |
 
 完整配置见 [.env.example](.env.example)。不要使用多个 Uvicorn worker，否则每个进程都会各自加载模型。

@@ -20,6 +20,7 @@ class Settings:
     max_upload_bytes: int = 2 * 1024 * 1024 * 1024
     allow_interrupt_running: bool = False
     max_queue_size: int = 8
+    idle_release_seconds: float = 5.0
 
     runtime_path: Path = Path(".runtime/ComfyUI")
     model_root: Path = Path("models")
@@ -45,6 +46,9 @@ class Settings:
             max_upload_bytes=max_upload_mb * 1024 * 1024,
             allow_interrupt_running=_env_bool("H3_ALLOW_INTERRUPT_RUNNING"),
             max_queue_size=int(os.getenv("H3_MAX_QUEUE_SIZE", str(defaults.max_queue_size))),
+            idle_release_seconds=float(
+                os.getenv("H3_IDLE_RELEASE_SECONDS", str(defaults.idle_release_seconds))
+            ),
             runtime_path=Path(os.getenv("H3_COMFY_CORE_PATH", str(defaults.runtime_path))),
             model_root=Path(os.getenv("H3_MODEL_DIR", str(defaults.model_root))),
             data_root=Path(os.getenv("H3_DATA_DIR", str(defaults.data_root))),

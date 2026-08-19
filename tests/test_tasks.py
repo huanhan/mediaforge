@@ -11,6 +11,7 @@ from minimaxh3_service.workflow import GenerationPlan
 class StubRunner:
     def __init__(self) -> None:
         self.closed = False
+        self.released = 0
 
     def readiness(self) -> dict:
         return {"status": "ready"}
@@ -31,6 +32,9 @@ class StubRunner:
     def close(self) -> None:
         self.closed = True
 
+    def release_models(self) -> None:
+        self.released += 1
+
 
 def test_task_manager_runs_local_generation(tmp_path: Path) -> None:
     async def scenario() -> None:
@@ -44,6 +48,7 @@ def test_task_manager_runs_local_generation(tmp_path: Path) -> None:
             output_factory,
             max_queue_size=2,
             allow_interrupt_running=False,
+            idle_release_seconds=0.05,
         )
         await manager.start()
         submitted = await manager.submit(GenerationRequest(prompt="A local CUDA generation", seed=1))
@@ -53,7 +58,37 @@ def test_task_manager_runs_local_generation(tmp_path: Path) -> None:
         assert task.status == "succeeded"
         assert task.progress == 1.0
         assert task.outputs[0].path.read_bytes() == b"mp4"
+        await asyncio.sleep(0.08)
+        assert runner.released == 1
         await manager.close()
         assert runner.closed
+
+    asyncio.run(scenario())
+
+
+def test_task_arriving_during_idle_window_prevents_model_release(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        runner = StubRunner()
+
+        def output_factory(task_id: str, _: str | None) -> OutputArtifact:
+            return OutputArtifact("result.mp4", "", tmp_path / f"{task_id}.mp4")
+
+        manager = LocalTaskManager(
+            runner,
+            output_factory,
+            max_queue_size=2,
+            allow_interrupt_running=False,
+            idle_release_seconds=0.1,
+        )
+        await manager.start()
+        first = await manager.submit(GenerationRequest(prompt="first", seed=1))
+        await manager.queue.join()
+        await asyncio.sleep(0.03)
+        second = await manager.submit(GenerationRequest(prompt="second", seed=2))
+        await manager.queue.join()
+        assert manager.get(first.id).status == "succeeded"
+        assert manager.get(second.id).status == "succeeded"
+        assert runner.released == 0
+        await manager.close()
 
     asyncio.run(scenario())

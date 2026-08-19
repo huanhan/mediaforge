@@ -169,6 +169,10 @@ class NativeH3Runner:
             runtime_error = f"MP4 encoders are unavailable: {exc}"
 
         ready = not missing_runtime and not missing_models and runtime_error is None
+        models_loaded = any(
+            model is not None
+            for model in (self._model, self._clip, self._video_vae, self._audio_vae)
+        )
         return {
             "status": "ready" if ready else "not_ready",
             "backend": "native",
@@ -188,6 +192,7 @@ class NativeH3Runner:
             },
             "reason": runtime_error,
             "loaded": self._core is not None,
+            "models_loaded": models_loaded,
         }
 
     def _import_core(self) -> SimpleNamespace:
@@ -551,16 +556,24 @@ class NativeH3Runner:
                 core.model_management.unload_all_models()
             core.model_management.soft_empty_cache()
 
-    def close(self) -> None:
+    def release_models(self) -> None:
         if self._core is None:
             return
-        self._core.model_management.unload_all_models()
+        core = self._core
+        core.model_management.unload_all_models()
         self._model = None
+        self._model_mode = None
         self._clip = None
         self._video_vae = None
         self._audio_vae = None
         gc.collect()
-        self._core.model_management.soft_empty_cache()
-        if self._core.dynamic_vram_enabled:
-            self._core.memory_management.aimdo_enabled = False
-            self._core.aimdo_control.deinit()
+        core.model_management.soft_empty_cache()
+
+    def close(self) -> None:
+        if self._core is None:
+            return
+        core = self._core
+        self.release_models()
+        if core.dynamic_vram_enabled:
+            core.memory_management.aimdo_enabled = False
+            core.aimdo_control.deinit()

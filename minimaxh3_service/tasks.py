@@ -33,6 +33,8 @@ class H3Runner(Protocol):
 
     def close(self) -> None: ...
 
+    def release_models(self) -> None: ...
+
 
 @dataclass(slots=True)
 class _TaskRecord:
@@ -50,13 +52,16 @@ class LocalTaskManager:
         *,
         max_queue_size: int,
         allow_interrupt_running: bool,
+        idle_release_seconds: float = 5.0,
     ) -> None:
         self.runner = runner
         self.output_factory = output_factory
         self.queue: asyncio.Queue[str] = asyncio.Queue(maxsize=max_queue_size)
         self.allow_interrupt_running = allow_interrupt_running
+        self.idle_release_seconds = max(0.0, idle_release_seconds)
         self.records: dict[str, _TaskRecord] = {}
         self._worker: asyncio.Task[None] | None = None
+        self._release_task: asyncio.Task[None] | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
 
     async def start(self) -> None:
@@ -68,6 +73,9 @@ class LocalTaskManager:
             if record.task.status in {"queued", "running"}:
                 record.cancel.set()
         await self.queue.join()
+        if self._release_task is not None:
+            with contextlib.suppress(Exception):
+                await asyncio.shield(self._release_task)
         if self._worker is not None:
             self._worker.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -126,9 +134,30 @@ class LocalTaskManager:
         return self.get(task_id)
 
     async def _run(self) -> None:
+        wait_for_idle_release = False
         while True:
-            task_id = await self.queue.get()
+            if wait_for_idle_release:
+                try:
+                    task_id = await asyncio.wait_for(
+                        self.queue.get(), timeout=self.idle_release_seconds
+                    )
+                except asyncio.TimeoutError:
+                    release_task = asyncio.create_task(
+                        asyncio.to_thread(self.runner.release_models),
+                        name="minimax-h3-idle-release",
+                    )
+                    self._release_task = release_task
+                    release_task.add_done_callback(self._clear_release_task)
+                    try:
+                        await asyncio.shield(release_task)
+                    except Exception:
+                        logger.exception("failed to release idle H3 models")
+                    wait_for_idle_release = False
+                    continue
+            else:
+                task_id = await self.queue.get()
             record = self.records[task_id]
+            generation_attempted = False
             try:
                 if record.cancel.is_set():
                     continue
@@ -139,6 +168,7 @@ class LocalTaskManager:
                     if self._loop is not None:
                         self._loop.call_soon_threadsafe(self._set_progress, task_id, value)
 
+                generation_attempted = True
                 await asyncio.to_thread(
                     self.runner.generate,
                     record.plan,
@@ -163,6 +193,12 @@ class LocalTaskManager:
                 record.task.error = str(exc)
             finally:
                 self.queue.task_done()
+                if generation_attempted:
+                    wait_for_idle_release = True
+
+    def _clear_release_task(self, task: asyncio.Task[None]) -> None:
+        if self._release_task is task:
+            self._release_task = None
 
     def _set_progress(self, task_id: str, value: float) -> None:
         record = self.records.get(task_id)

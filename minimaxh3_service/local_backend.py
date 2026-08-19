@@ -28,6 +28,7 @@ class LocalGenerationBackend:
             self.assets.output_path,
             max_queue_size=settings.max_queue_size,
             allow_interrupt_running=settings.allow_interrupt_running,
+            idle_release_seconds=settings.idle_release_seconds,
         )
 
     async def start(self) -> None:
