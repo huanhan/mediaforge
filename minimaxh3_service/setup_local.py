@@ -21,6 +21,12 @@ BASE_MODEL_FILES = (
     "vae/minimax_h3_audio_vae_fp32.safetensors",
 )
 REF2V_MODEL_FILE = "diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors"
+FL2VA_ACCELERATION_LORA_FILE = (
+    "loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors"
+)
+REF2VA_ACCELERATION_LORA_FILE = (
+    "loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors"
+)
 
 
 def _run(*args: str, cwd: Path | None = None) -> None:
@@ -70,7 +76,13 @@ def install_runtime(runtime_path: Path) -> None:
     print(f"Installed pinned inference runtime: {runtime_path}")
 
 
-def download_models(model_root: Path, *, with_ref2v: bool, token: str | None) -> None:
+def download_models(
+    model_root: Path,
+    *,
+    with_ref2v: bool,
+    with_acceleration_lora: bool,
+    token: str | None,
+) -> None:
     try:
         from huggingface_hub import hf_hub_download
     except ImportError as exc:
@@ -79,6 +91,10 @@ def download_models(model_root: Path, *, with_ref2v: bool, token: str | None) ->
     files = list(BASE_MODEL_FILES)
     if with_ref2v:
         files.append(REF2V_MODEL_FILE)
+    if with_acceleration_lora:
+        files.append(FL2VA_ACCELERATION_LORA_FILE)
+        if with_ref2v:
+            files.append(REF2VA_ACCELERATION_LORA_FILE)
     model_root.mkdir(parents=True, exist_ok=True)
     for filename in files:
         destination = model_root / filename
@@ -99,6 +115,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--runtime-path", type=Path, default=Path(".runtime/ComfyUI"))
     parser.add_argument("--model-dir", type=Path, default=Path("models"))
     parser.add_argument("--with-ref2v", action="store_true", help="also download the 21 GB Ref2V model")
+    parser.add_argument(
+        "--without-acceleration-lora",
+        action="store_false",
+        dest="with_acceleration_lora",
+        default=True,
+        help="skip the Turbo LoRAs downloaded by default",
+    )
     parser.add_argument("--runtime-only", action="store_true", help="install code without model weights")
     parser.add_argument(
         "--accept-license",
@@ -118,9 +141,17 @@ def main() -> None:
         return
     if not args.accept_license:
         print(f"Read the model license first: {MODEL_LICENSE}", file=sys.stderr)
-        print("Rerun with --accept-license to download approximately 43 GB of base weights.", file=sys.stderr)
+        print(
+            "Rerun with --accept-license to download approximately 45 GB of weights.",
+            file=sys.stderr,
+        )
         raise SystemExit(2)
-    download_models(model_root, with_ref2v=args.with_ref2v, token=args.hf_token)
+    download_models(
+        model_root,
+        with_ref2v=args.with_ref2v,
+        with_acceleration_lora=args.with_acceleration_lora,
+        token=args.hf_token,
+    )
     print("Local MiniMax H3 runtime is installed.")
 
 

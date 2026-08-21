@@ -39,6 +39,13 @@ DISCARD_PENULTIMATE_SIGMA_SAMPLERS = {
     "uni_pc",
     "uni_pc_bh2",
 }
+ACCELERATION_STEPS = {
+    GenerationMode.T2V: 8,
+    GenerationMode.FL2V: 8,
+    GenerationMode.REF2V: 4,
+}
+ACCELERATION_SAMPLER = "euler"
+ACCELERATION_SCHEDULER = "simple"
 
 
 def _conditioning_set_values(conditioning: list, values: dict[str, Any]) -> list:
@@ -104,12 +111,19 @@ class NativeH3Runner:
         for relative in ("comfy/sd.py", "comfy/ldm/minimax/model.py", "comfy/text_encoders/minimax.py"):
             if not (runtime / relative).is_file():
                 missing_runtime.append(relative)
-        required_model_keys = ("fl2va", "text_encoder", "video_vae", "audio_vae")
+        required_model_keys = ["fl2va", "text_encoder", "video_vae", "audio_vae"]
+        if self.settings.enable_acceleration_lora:
+            required_model_keys.append("fl2va_acceleration_lora")
         missing_models = [
             name for name in required_model_keys if not self.settings.model_paths[name].is_file()
         ]
+        optional_model_keys = ["ref2va"]
+        if self.settings.enable_acceleration_lora:
+            optional_model_keys.append("ref2va_acceleration_lora")
         missing_optional_models = [
-            name for name in ("ref2va",) if not self.settings.model_paths[name].is_file()
+            name
+            for name in optional_model_keys
+            if not self.settings.model_paths[name].is_file()
         ]
 
         devices: list[dict[str, Any]] = []
@@ -189,6 +203,11 @@ class NativeH3Runner:
                 "dynamic_enabled": bool(
                     self._core is not None and self._core.dynamic_vram_enabled
                 ),
+            },
+            "acceleration_lora": {
+                "enabled": self.settings.enable_acceleration_lora,
+                "fl2va_steps": ACCELERATION_STEPS[GenerationMode.FL2V],
+                "ref2va_steps": ACCELERATION_STEPS[GenerationMode.REF2V],
             },
             "reason": runtime_error,
             "loaded": self._core is not None,
@@ -289,9 +308,39 @@ class NativeH3Runner:
             gc.collect()
             core.model_management.soft_empty_cache()
         path = self.settings.model_paths["ref2va" if wanted == GenerationMode.REF2V else "fl2va"]
-        self._model = core.sd.load_diffusion_model(str(path), model_options={})
+        model = core.sd.load_diffusion_model(str(path), model_options={})
+        if self.settings.enable_acceleration_lora:
+            lora_key = (
+                "ref2va_acceleration_lora"
+                if wanted == GenerationMode.REF2V
+                else "fl2va_acceleration_lora"
+            )
+            lora, metadata = core.utils.load_torch_file(
+                str(self.settings.model_paths[lora_key]),
+                safe_load=True,
+                return_metadata=True,
+            )
+            model, _ = core.sd.load_lora_for_models(
+                model,
+                None,
+                lora,
+                1.0,
+                0.0,
+                lora_metadata=metadata,
+            )
+        self._model = model
         self._model_mode = wanted
         return self._model
+
+    def _sampling_options(self, plan: GenerationPlan) -> tuple[int, str, str]:
+        request = plan.request
+        if not self.settings.enable_acceleration_lora:
+            return request.steps, request.sampler_name, request.scheduler
+        return (
+            ACCELERATION_STEPS[request.mode],
+            ACCELERATION_SAMPLER,
+            ACCELERATION_SCHEDULER,
+        )
 
     def _empty_latent(self, plan: GenerationPlan) -> dict[str, Any]:
         core = self._import_core()
@@ -465,20 +514,21 @@ class NativeH3Runner:
     ) -> Any:
         core = self._import_core()
         request = plan.request
+        steps, sampler_name, scheduler = self._sampling_options(plan)
         latent_image = core.sample.fix_empty_latent_channels(model, latent["samples"])
         noise = core.sample.prepare_noise(latent_image, plan.seed, None)
-        sampler = core.samplers.sampler_object(request.sampler_name)
-        total_steps = request.steps if request.denoise >= 1.0 else int(request.steps / request.denoise)
+        sampler = core.samplers.sampler_object(sampler_name)
+        total_steps = steps if request.denoise >= 1.0 else int(steps / request.denoise)
         sigma_steps = total_steps
-        discard_penultimate = request.sampler_name in DISCARD_PENULTIMATE_SIGMA_SAMPLERS
+        discard_penultimate = sampler_name in DISCARD_PENULTIMATE_SIGMA_SAMPLERS
         if discard_penultimate:
             sigma_steps += 1
         sigmas = core.samplers.calculate_sigmas(
-            model.get_model_object("model_sampling"), request.scheduler, sigma_steps
+            model.get_model_object("model_sampling"), scheduler, sigma_steps
         )
         if discard_penultimate:
             sigmas = core.torch.cat([sigmas[:-2], sigmas[-1:]])
-        sigmas = sigmas.cpu()[-(request.steps + 1) :]
+        sigmas = sigmas.cpu()[-(steps + 1) :]
         guider = core.samplers.CFGGuider(model)
         guider.inner_set_conds({"positive": conditioning})
 

@@ -64,6 +64,17 @@ class LocalGenerationBackend:
                 status_code=503,
                 code="model_missing",
             )
+        if (
+            request.mode.value == "ref2v"
+            and self.settings.enable_acceleration_lora
+            and not self.settings.model_paths["ref2va_acceleration_lora"].is_file()
+        ):
+            raise BackendError(
+                "Ref2V acceleration LoRA is not installed; rerun "
+                "minimaxh3-setup with --with-ref2v",
+                status_code=503,
+                code="model_missing",
+            )
         return await self.tasks.submit(request)
 
     async def get_task(self, task_id: str) -> BackendTask | None:

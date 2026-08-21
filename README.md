@@ -13,7 +13,7 @@
 
 ## 硬件和空间
 
-基础 T2V/FL2V 文件约 43 GB：
+基础 T2V/FL2V 权重约 43 GB，默认启用的 Turbo acceleration LoRA 另需约 2 GB：
 
 | 文件 | 大小 |
 |---|---:|
@@ -36,7 +36,7 @@ uv run minimaxh3-setup --accept-license
 第二条命令会：
 
 1. 只检出固定提交的 ComfyUI 推理内核到 `.runtime/ComfyUI`，不安装 UI 或启动 ComfyUI。
-2. 从 `Comfy-Org/MiniMax-H3` 下载基础四个权重到 `models/`。
+2. 从 `Comfy-Org/MiniMax-H3` 下载基础四个权重和 FL2V/T2V Turbo LoRA 到 `models/`。
 
 模型受 [MiniMax H3 Community License](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE) 约束；`--accept-license` 表示已阅读并接受该协议。
 
@@ -45,6 +45,20 @@ uv run minimaxh3-setup --accept-license
 ```powershell
 uv run minimaxh3-setup --accept-license --with-ref2v
 ```
+
+Acceleration LoRA 默认下载并启用：T2V/FL2V 使用官方 8-step Turbo LoRA，Ref2V
+安装时同时下载 4-step Turbo LoRA。开关启用时，T2V/FL2V 固定使用官方推荐的
+`euler + simple + 8 steps`，Ref2V 使用 `euler + simple + 4 steps`；请求中的
+`steps`、`sampler_name` 和 `scheduler` 会由 Turbo 配置覆盖。
+
+如需关闭并跳过 LoRA 下载：
+
+```powershell
+uv run minimaxh3-setup --accept-license --without-acceleration-lora
+$env:H3_ENABLE_ACCELERATION_LORA = "false"
+```
+
+关闭时完全保留请求的原有采样参数。
 
 ## 启动
 
@@ -123,6 +137,9 @@ curl.exe -X POST http://127.0.0.1:8000/v1/files -F "kind=image" -F "file=@first.
 | `H3_DEVICE` | `cuda` | 推理设备 |
 | `H3_VRAM_MODE` | `dynamic` | `dynamic`、`lowvram`、`novram`、`highvram` 或 `cpu` |
 | `H3_RESERVE_VRAM_GB` | `1.0` | 为桌面和其他程序预留的显存 |
+| `H3_ENABLE_ACCELERATION_LORA` | `true` | 启用官方 Turbo acceleration LoRA 和对应 8/4-step 采样参数 |
+| `H3_FL2VA_ACCELERATION_LORA` | `minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors` | T2V/FL2V acceleration LoRA 文件名 |
+| `H3_REF2VA_ACCELERATION_LORA` | `minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors` | Ref2V acceleration LoRA 文件名 |
 | `H3_MAX_QUEUE_SIZE` | `8` | 最大排队任务数 |
 | `H3_IDLE_RELEASE_SECONDS` | `5.0` | 完成任务后无新任务多久释放模型 |
 | `H3_API_KEY` | 空 | 可选 API Key |
@@ -153,6 +170,8 @@ uv run python examples/client.py
 成功标准是任务状态为 `succeeded`，下载的 `result.mp4` 含 24 FPS 视频和 32 kHz 立体声音轨。
 
 本项目在 RTX 4070 Ti 12GB、PyTorch 2.8.0+cu126 上完成过真实 T2V 冒烟测试：608x352、107 帧、20 步约 6 分 32 秒，输出 24 FPS 视频和 32 kHz 立体声。cu126 会使用量化 eager fallback，速度慢于 cu130 优化内核；具体耗时随提示词、分辨率、时长、磁盘和系统内存变化。
+
+同机启用默认 Turbo LoRA 后，608x352、107 帧、8 步的冷启动 HTTP 实测从提交到首次观察到成功约 3 分 21 秒；轮询粒度使该数字是完成耗时上界。服务返回的 MP4 为 976,035 字节。
 
 ### 分辨率和时长矩阵测试
 

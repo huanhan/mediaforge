@@ -158,7 +158,11 @@ def create_app(
     @router.get("/models", tags=["models"])
     async def models() -> dict[str, Any]:
         modes = ["t2v", "fl2v"]
-        if service_settings.model_paths["ref2va"].is_file():
+        ref2v_ready = service_settings.model_paths["ref2va"].is_file() and (
+            not service_settings.enable_acceleration_lora
+            or service_settings.model_paths["ref2va_acceleration_lora"].is_file()
+        )
+        if ref2v_ready:
             modes.append("ref2v")
         return {
             "id": "MiniMax-H3",
@@ -172,6 +176,7 @@ def create_app(
                 "max_reference_images": 9,
                 "max_reference_videos": 3,
                 "max_reference_audios": 3,
+                "acceleration_lora": service_settings.enable_acceleration_lora,
             },
         }
 

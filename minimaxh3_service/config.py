@@ -28,9 +28,16 @@ class Settings:
     device: str = "cuda"
     reserve_vram_gb: float = 1.0
     vram_mode: str = "dynamic"
+    enable_acceleration_lora: bool = True
 
     fl2va_model: str = "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
     ref2va_model: str = "minimax_h3_ref2va_pruned_int8_convrot.safetensors"
+    fl2va_acceleration_lora: str = (
+        "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors"
+    )
+    ref2va_acceleration_lora: str = (
+        "minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors"
+    )
     text_encoder: str = "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
     video_vae: str = "minimax_h3_video_vae_fp16.safetensors"
     audio_vae: str = "minimax_h3_audio_vae_fp32.safetensors"
@@ -55,8 +62,17 @@ class Settings:
             device=os.getenv("H3_DEVICE", defaults.device),
             reserve_vram_gb=float(os.getenv("H3_RESERVE_VRAM_GB", str(defaults.reserve_vram_gb))),
             vram_mode=os.getenv("H3_VRAM_MODE", defaults.vram_mode).lower(),
+            enable_acceleration_lora=_env_bool(
+                "H3_ENABLE_ACCELERATION_LORA", defaults.enable_acceleration_lora
+            ),
             fl2va_model=os.getenv("H3_FL2VA_MODEL", defaults.fl2va_model),
             ref2va_model=os.getenv("H3_REF2VA_MODEL", defaults.ref2va_model),
+            fl2va_acceleration_lora=os.getenv(
+                "H3_FL2VA_ACCELERATION_LORA", defaults.fl2va_acceleration_lora
+            ),
+            ref2va_acceleration_lora=os.getenv(
+                "H3_REF2VA_ACCELERATION_LORA", defaults.ref2va_acceleration_lora
+            ),
             text_encoder=os.getenv("H3_TEXT_ENCODER", defaults.text_encoder),
             video_vae=os.getenv("H3_VIDEO_VAE", defaults.video_vae),
             audio_vae=os.getenv("H3_AUDIO_VAE", defaults.audio_vae),
@@ -67,6 +83,8 @@ class Settings:
         return {
             "fl2va": self.fl2va_model,
             "ref2va": self.ref2va_model,
+            "fl2va_acceleration_lora": self.fl2va_acceleration_lora,
+            "ref2va_acceleration_lora": self.ref2va_acceleration_lora,
             "text_encoder": self.text_encoder,
             "video_vae": self.video_vae,
             "audio_vae": self.audio_vae,
@@ -78,6 +96,8 @@ class Settings:
         return {
             "fl2va": root / "diffusion_models" / self.fl2va_model,
             "ref2va": root / "diffusion_models" / self.ref2va_model,
+            "fl2va_acceleration_lora": root / "loras" / self.fl2va_acceleration_lora,
+            "ref2va_acceleration_lora": root / "loras" / self.ref2va_acceleration_lora,
             "text_encoder": root / "text_encoders" / self.text_encoder,
             "video_vae": root / "vae" / self.video_vae,
             "audio_vae": root / "vae" / self.audio_vae,

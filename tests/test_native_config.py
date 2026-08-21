@@ -1,10 +1,14 @@
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from minimaxh3_service.config import Settings
-from minimaxh3_service.models import GenerationMode
+from minimaxh3_service.models import GenerationMode, GenerationRequest
 from minimaxh3_service.native import NativeH3Runner
+from minimaxh3_service.workflow import build_plan
 
 
 def runner(settings: Settings) -> NativeH3Runner:
@@ -30,6 +34,137 @@ def test_cpu_device_does_not_add_conflicting_vram_arguments() -> None:
 
     assert "--cpu" in arguments
     assert "--lowvram" not in arguments
+
+
+def test_acceleration_lora_config_reads_env_and_uses_lora_directory(tmp_path: Path) -> None:
+    with patch.dict(
+        os.environ,
+        {
+            "H3_ENABLE_ACCELERATION_LORA": "true",
+            "H3_MODEL_DIR": str(tmp_path),
+            "H3_FL2VA_ACCELERATION_LORA": "fl2v-turbo.safetensors",
+            "H3_REF2VA_ACCELERATION_LORA": "ref2v-turbo.safetensors",
+        },
+        clear=True,
+    ):
+        settings = Settings.from_env()
+
+    assert settings.enable_acceleration_lora is True
+    assert settings.model_paths["fl2va_acceleration_lora"] == (
+        tmp_path / "loras" / "fl2v-turbo.safetensors"
+    ).resolve()
+    assert settings.model_paths["ref2va_acceleration_lora"] == (
+        tmp_path / "loras" / "ref2v-turbo.safetensors"
+    ).resolve()
+
+
+def test_acceleration_lora_is_enabled_when_env_is_unset() -> None:
+    with patch.dict(os.environ, {}, clear=True):
+        settings = Settings.from_env()
+
+    assert settings.enable_acceleration_lora is True
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_lora_key"),
+    [
+        (GenerationMode.FL2V, "fl2va_acceleration_lora"),
+        (GenerationMode.REF2V, "ref2va_acceleration_lora"),
+    ],
+)
+def test_load_diffusion_model_applies_mode_specific_acceleration_lora(
+    tmp_path: Path,
+    mode: GenerationMode,
+    expected_lora_key: str,
+) -> None:
+    settings = Settings(model_root=tmp_path, enable_acceleration_lora=True)
+    instance = runner(settings)
+    base_model = object()
+    accelerated_model = object()
+    lora = {"adapter": object()}
+    metadata = {"format": "pt"}
+    core = SimpleNamespace(sd=MagicMock(), utils=MagicMock())
+    core.sd.load_diffusion_model.return_value = base_model
+    core.utils.load_torch_file.return_value = (lora, metadata)
+    core.sd.load_lora_for_models.return_value = (accelerated_model, None)
+    instance._core = core
+
+    assert instance._load_diffusion_model(mode) is accelerated_model
+    core.utils.load_torch_file.assert_called_once_with(
+        str(settings.model_paths[expected_lora_key]),
+        safe_load=True,
+        return_metadata=True,
+    )
+    core.sd.load_lora_for_models.assert_called_once_with(
+        base_model,
+        None,
+        lora,
+        1.0,
+        0.0,
+        lora_metadata=metadata,
+    )
+
+
+@pytest.mark.parametrize(
+    ("generation_request", "expected_steps"),
+    [
+        (GenerationRequest(prompt="text to video"), 8),
+        (
+            GenerationRequest(
+                prompt="reference to video",
+                mode="ref2v",
+                reference_images=["reference.png"],
+            ),
+            4,
+        ),
+    ],
+)
+def test_acceleration_lora_uses_turbo_sampling_parameters(
+    generation_request: GenerationRequest,
+    expected_steps: int,
+) -> None:
+    instance = runner(Settings(enable_acceleration_lora=True))
+
+    assert instance._sampling_options(build_plan(generation_request)) == (
+        expected_steps,
+        "euler",
+        "simple",
+    )
+
+
+def test_disabled_acceleration_lora_preserves_request_sampling_parameters() -> None:
+    request = GenerationRequest(
+        prompt="base model",
+        steps=12,
+        sampler_name="res_multistep",
+        scheduler="beta",
+    )
+
+    assert runner(
+        Settings(enable_acceleration_lora=False)
+    )._sampling_options(build_plan(request)) == (
+        12,
+        "res_multistep",
+        "beta",
+    )
+
+
+def test_readiness_requires_acceleration_lora_only_when_enabled(tmp_path: Path) -> None:
+    with (
+        patch("minimaxh3_service.native.importlib.util.find_spec", return_value=None),
+        patch("minimaxh3_service.native.validate_mp4_encoders"),
+    ):
+        enabled = runner(
+            Settings(model_root=tmp_path, enable_acceleration_lora=True)
+        ).readiness()
+        disabled = runner(
+            Settings(model_root=tmp_path, enable_acceleration_lora=False)
+        ).readiness()
+
+    assert "fl2va_acceleration_lora" in enabled["missing_models"]
+    assert "ref2va_acceleration_lora" in enabled["missing_optional_models"]
+    assert "fl2va_acceleration_lora" not in disabled["missing_models"]
+    assert "ref2va_acceleration_lora" not in disabled["missing_optional_models"]
 
 
 def fake_core(*, dynamic_vram_enabled: bool = False) -> SimpleNamespace:
