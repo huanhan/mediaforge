@@ -1,8 +1,9 @@
+from fractions import Fraction
 from pathlib import Path
 
 import pytest
 
-from minimaxh3_service.media import save_mp4
+from minimaxh3_service.media import load_video, save_mp4
 
 
 def test_save_mp4_muxes_video_and_stereo_audio(tmp_path: Path) -> None:
@@ -40,3 +41,18 @@ def test_save_mp4_checks_cancellation_during_encoding(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="canceled"):
         save_mp4(output, images, audio, check_canceled=cancel)
+
+
+def test_video_without_audio_round_trips_frames_and_fractional_fps(tmp_path: Path) -> None:
+    av = pytest.importorskip("av")
+    torch = pytest.importorskip("torch")
+    output = tmp_path / "silent.mp4"
+    images = torch.zeros((4, 32, 48, 3), dtype=torch.float32)
+
+    save_mp4(output, images, None, fps=Fraction(12, 1))
+    decoded, fps = load_video(output)
+
+    assert tuple(decoded.shape) == (4, 32, 48, 3)
+    assert fps == Fraction(12, 1)
+    with av.open(str(output)) as container:
+        assert len(container.streams.audio) == 0

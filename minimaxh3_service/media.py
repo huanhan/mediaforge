@@ -33,6 +33,26 @@ def video_dimensions(path: Path) -> tuple[int, int]:
         return int(stream.codec_context.width), int(stream.codec_context.height)
 
 
+def load_video(path: Path) -> tuple[Any, Fraction]:
+    import av
+    import numpy as np
+    import torch
+
+    frames: list[Any] = []
+    with av.open(str(path)) as container:
+        if not container.streams.video:
+            raise ValueError(f"video has no video stream: {path.name}")
+        stream = container.streams.video[0]
+        rate = stream.average_rate or stream.base_rate or Fraction(24, 1)
+        fps = Fraction(rate)
+        for frame in container.decode(stream):
+            frames.append(frame.to_ndarray(format="rgb24"))
+    if not frames:
+        raise ValueError(f"video contains no decodable frames: {path.name}")
+    array = np.stack(frames).astype(np.float32) / 255.0
+    return torch.from_numpy(array), fps
+
+
 def load_video_frames(
     path: Path,
     *,
@@ -96,9 +116,9 @@ def load_audio(path: Path, *, sample_rate: int = 32000, optional: bool = False) 
 def save_mp4(
     path: Path,
     images: Any,
-    audio: dict[str, Any],
+    audio: dict[str, Any] | None,
     *,
-    fps: int = 24,
+    fps: int | Fraction = 24,
     check_canceled: Callable[[], None] | None = None,
 ) -> None:
     import av
@@ -106,18 +126,22 @@ def save_mp4(
 
     path.parent.mkdir(parents=True, exist_ok=True)
     frame_count, height, width = int(images.shape[0]), int(images.shape[1]), int(images.shape[2])
-    waveform = audio["waveform"][0].detach().float().cpu()
-    sample_rate = int(audio["sample_rate"])
-    if waveform.shape[0] == 1:
-        waveform = waveform.repeat(2, 1)
-    elif waveform.shape[0] > 2:
-        waveform = waveform[:2]
-    required_samples = round(frame_count / fps * sample_rate)
-    if waveform.shape[1] < required_samples:
-        padded = waveform.new_zeros((2, required_samples))
-        padded[:, : waveform.shape[1]] = waveform
-        waveform = padded
-    waveform = waveform[:, :required_samples].clamp(-1.0, 1.0).numpy()
+    waveform = None
+    sample_rate = 0
+    required_samples = 0
+    if audio is not None:
+        waveform = audio["waveform"][0].detach().float().cpu()
+        sample_rate = int(audio["sample_rate"])
+        if waveform.shape[0] == 1:
+            waveform = waveform.repeat(2, 1)
+        elif waveform.shape[0] > 2:
+            waveform = waveform[:2]
+        required_samples = round(frame_count / float(fps) * sample_rate)
+        if waveform.shape[1] < required_samples:
+            padded = waveform.new_zeros((2, required_samples))
+            padded[:, : waveform.shape[1]] = waveform
+            waveform = padded
+        waveform = waveform[:, :required_samples].clamp(-1.0, 1.0).numpy()
 
     with av.open(str(path), mode="w") as container:
         video_stream = container.add_stream("libx264", rate=fps)
@@ -126,9 +150,11 @@ def save_mp4(
         video_stream.pix_fmt = "yuv420p"
         video_stream.options = {"crf": "20", "preset": "medium"}
 
-        audio_stream = container.add_stream("aac", rate=sample_rate)
-        audio_stream.layout = "stereo"
-        audio_stream.bit_rate = 192_000
+        audio_stream = None
+        if waveform is not None:
+            audio_stream = container.add_stream("aac", rate=sample_rate)
+            audio_stream.layout = "stereo"
+            audio_stream.bit_rate = 192_000
 
         for image in images:
             if check_canceled is not None:
@@ -149,16 +175,17 @@ def save_mp4(
         for packet in video_stream.encode():
             container.mux(packet)
 
-        frame_size = audio_stream.codec_context.frame_size or 1024
-        for offset in range(0, required_samples, frame_size):
-            if check_canceled is not None:
-                check_canceled()
-            chunk = np.ascontiguousarray(waveform[:, offset : offset + frame_size])
-            frame = av.AudioFrame.from_ndarray(chunk, format="fltp", layout="stereo")
-            frame.sample_rate = sample_rate
-            frame.pts = offset
-            frame.time_base = Fraction(1, sample_rate)
-            for packet in audio_stream.encode(frame):
+        if audio_stream is not None and waveform is not None:
+            frame_size = audio_stream.codec_context.frame_size or 1024
+            for offset in range(0, required_samples, frame_size):
+                if check_canceled is not None:
+                    check_canceled()
+                chunk = np.ascontiguousarray(waveform[:, offset : offset + frame_size])
+                frame = av.AudioFrame.from_ndarray(chunk, format="fltp", layout="stereo")
+                frame.sample_rate = sample_rate
+                frame.pts = offset
+                frame.time_base = Fraction(1, sample_rate)
+                for packet in audio_stream.encode(frame):
+                    container.mux(packet)
+            for packet in audio_stream.encode():
                 container.mux(packet)
-        for packet in audio_stream.encode():
-            container.mux(packet)

@@ -12,7 +12,8 @@ from typing import Callable
 
 from .backend import OutputArtifact
 from .config import Settings
-from .models import UpscaleRequest
+from .media import load_audio, load_video, save_mp4
+from .models import VIDEO_EXTENSIONS, UpscaleRequest
 from .tasks import GenerationCanceled
 
 
@@ -58,7 +59,7 @@ class SeedVR2UpscaleRunner:
         ]
         reason = None
         if self.settings.device.lower() == "cpu":
-            reason = "SeedVR2 image upscaling requires a CUDA device"
+            reason = "SeedVR2 upscaling requires a CUDA device"
         ready = not missing_runtime and not missing_models and not missing_dependencies and reason is None
         return {
             "status": "ready" if ready else "not_ready",
@@ -175,7 +176,14 @@ class SeedVR2UpscaleRunner:
 
         progress(0.05)
         source = self.resolve_input(request.file_id)
-        frames, _ = cli.extract_frames_from_image(str(source))
+        is_video = source.suffix.lower() in VIDEO_EXTENSIONS
+        fps = None
+        audio = None
+        if is_video:
+            frames, fps = load_video(source)
+            audio = load_audio(source, optional=True)
+        else:
+            frames, _ = cli.extract_frames_from_image(str(source))
         check_canceled()
         progress(0.1)
         try:
@@ -188,15 +196,34 @@ class SeedVR2UpscaleRunner:
             check_canceled()
             progress(0.9)
 
-            import numpy as np
-            from PIL import Image
+            if is_video:
+                import torch.nn.functional as functional
 
-            frame = (result[0].cpu().numpy() * 255.0).clip(0, 255).astype(np.uint8)
-            image = Image.fromarray(frame[..., :3], "RGB")
-            if image.size != (request.width, request.height):
-                image = image.resize((request.width, request.height), Image.Resampling.LANCZOS)
-            output.path.parent.mkdir(parents=True, exist_ok=True)
-            image.save(output.path, format="PNG")
+                if tuple(result.shape[1:3]) != (request.height, request.width):
+                    result = functional.interpolate(
+                        result[..., :3].movedim(-1, 1),
+                        size=(request.height, request.width),
+                        mode="bicubic",
+                        align_corners=False,
+                        antialias=True,
+                    ).movedim(1, -1)
+                save_mp4(
+                    output.path,
+                    result,
+                    audio,
+                    fps=fps or 24,
+                    check_canceled=check_canceled,
+                )
+            else:
+                import numpy as np
+                from PIL import Image
+
+                frame = (result[0].cpu().numpy() * 255.0).clip(0, 255).astype(np.uint8)
+                image = Image.fromarray(frame[..., :3], "RGB")
+                if image.size != (request.width, request.height):
+                    image = image.resize((request.width, request.height), Image.Resampling.LANCZOS)
+                output.path.parent.mkdir(parents=True, exist_ok=True)
+                image.save(output.path, format="PNG")
             progress(0.99)
         except Exception:
             self.release_models()

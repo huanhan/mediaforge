@@ -1,4 +1,6 @@
 import sys
+import threading
+from fractions import Fraction
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -6,6 +8,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from minimaxh3_service.config import Settings
+from minimaxh3_service.backend import OutputArtifact
+from minimaxh3_service.models import UpscaleRequest
 from minimaxh3_service.upscale import SeedVR2UpscaleRunner
 
 
@@ -128,3 +132,84 @@ def test_release_failure_keeps_cache_state_for_retry() -> None:
 
     memory.complete_cleanup.assert_called_once()
     assert instance._runner_cache["runner"] is runner
+
+
+def test_image_upscale_keeps_png_path_and_image_extractor(tmp_path: Path) -> None:
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("PIL")
+    source = tmp_path / "source.png"
+    source.write_bytes(b"image")
+    output = OutputArtifact("result.png", "", tmp_path / "result.png")
+    frames = MagicMock(name="image-frames")
+    result = MagicMock(name="image-result")
+    result.__getitem__.return_value.cpu.return_value.numpy.return_value = numpy.zeros(
+        (2, 2, 3), dtype=numpy.float32
+    )
+    cli = SimpleNamespace(
+        debug=object(),
+        extract_frames_from_image=MagicMock(return_value=(frames, 30.0)),
+        _single_gpu_direct_processing=MagicMock(return_value=result),
+    )
+    runner = make_runner(Settings())
+    runner._cli = cli
+    runner._args = SimpleNamespace()
+    runner.resolve_input = lambda _: source
+    progress_values: list[float] = []
+
+    runner.upscale(
+        UpscaleRequest(file_id="source.png", width=64, height=64, seed=11),
+        output,
+        threading.Event(),
+        progress_values.append,
+    )
+
+    cli.extract_frames_from_image.assert_called_once_with(str(source))
+    cli._single_gpu_direct_processing.assert_called_once()
+    assert output.path.exists()
+    assert output.path.suffix == ".png"
+    assert progress_values[-1] == 0.99
+
+
+def test_video_upscale_uses_video_fps_and_preserves_optional_audio(tmp_path: Path) -> None:
+    torch = pytest.importorskip("torch")
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"video")
+    output = OutputArtifact("result.mp4", "", tmp_path / "result.mp4")
+    frames = torch.zeros((3, 2, 2, 3), dtype=torch.float32)
+    result = torch.ones((3, 2, 2, 3), dtype=torch.float32)
+    audio = {"waveform": object(), "sample_rate": 32_000}
+    cli = SimpleNamespace(
+        debug=object(),
+        extract_frames_from_image=MagicMock(),
+        _single_gpu_direct_processing=MagicMock(return_value=result),
+    )
+    runner = make_runner(Settings())
+    runner._cli = cli
+    runner._args = SimpleNamespace()
+    runner.resolve_input = lambda _: source
+
+    with patch(
+        "minimaxh3_service.upscale.load_video",
+        return_value=(frames, Fraction(12, 1)),
+    ) as load_video:
+        with patch(
+            "minimaxh3_service.upscale.load_audio",
+            return_value=audio,
+        ) as load_audio:
+            with patch("minimaxh3_service.upscale.save_mp4") as save_mp4:
+                runner.upscale(
+                    UpscaleRequest(file_id="source.mp4", width=64, height=64, seed=11),
+                    output,
+                    threading.Event(),
+                    lambda _: None,
+                )
+
+    load_video.assert_called_once_with(source)
+    load_audio.assert_called_once_with(source, optional=True)
+    cli.extract_frames_from_image.assert_not_called()
+    save_mp4.assert_called_once()
+    save_args, save_kwargs = save_mp4.call_args
+    assert save_args[0] == output.path
+    assert save_args[2] is audio
+    assert save_kwargs["fps"] == Fraction(12, 1)
+    assert save_kwargs["check_canceled"] is not None

@@ -29,6 +29,9 @@ from .backend import BackendError, BackendTask, GenerationBackend
 from .config import Settings
 from .local_backend import LocalGenerationBackend
 from .models import (
+    AUDIO_EXTENSIONS,
+    IMAGE_EXTENSIONS,
+    VIDEO_EXTENSIONS,
     GenerationRequest,
     OutputFile,
     SubmittedTask,
@@ -42,9 +45,9 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {
-    "image": {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"},
-    "video": {".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"},
-    "audio": {".wav", ".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus"},
+    "image": IMAGE_EXTENSIONS,
+    "video": VIDEO_EXTENSIONS,
+    "audio": AUDIO_EXTENSIONS,
 }
 TERMINAL_STATUSES = {"succeeded", "failed", "canceled", "unknown"}
 BackendFactory = Callable[[Settings], GenerationBackend]
@@ -192,6 +195,14 @@ def create_app(
                     "available": upscale_readiness.get("status") == "ready",
                     "backend": upscale_readiness.get("backend", "seedvr2"),
                     "model": service_settings.upscale_dit_model,
+                    "max_width": 8192,
+                    "max_height": 8192,
+                },
+                "video_upscale": {
+                    "available": upscale_readiness.get("status") == "ready",
+                    "backend": upscale_readiness.get("backend", "seedvr2"),
+                    "model": service_settings.upscale_dit_model,
+                    "preserves_audio": True,
                     "max_width": 8192,
                     "max_height": 8192,
                 },

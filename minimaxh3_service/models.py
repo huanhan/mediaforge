@@ -8,6 +8,9 @@ from pydantic import BaseModel, Field, StringConstraints, field_validator, model
 
 
 MAX_CANVAS_PIXELS = 768 * 1344
+IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"})
+VIDEO_EXTENSIONS = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"})
+AUDIO_EXTENSIONS = frozenset({".wav", ".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus"})
 FileId = Annotated[str, StringConstraints(min_length=1, max_length=512)]
 
 

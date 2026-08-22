@@ -28,3 +28,21 @@ def test_upscale_output_path_uses_png_and_stays_under_output_root(tmp_path: Path
     assert artifact.path.parent == (tmp_path / "output" / "jobs").resolve()
     assert artifact.filename == "upscaled_abcdef123456.png"
     assert artifact.file_type == "output"
+
+
+def test_upscale_output_path_uses_mp4_for_video_input(tmp_path: Path) -> None:
+    store = LocalAssetStore(tmp_path / "input", tmp_path / "output", 1024)
+    store.initialize()
+    source = store.input_root / "minimaxh3" / "20260822" / "source.mp4"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"mp4")
+
+    artifact = store.upscale_output_path(
+        "abcdef1234567890",
+        "jobs/upscaled",
+        source_file_id="minimaxh3/20260822/source.mp4",
+    )
+
+    assert artifact.path.parent == (tmp_path / "output" / "jobs").resolve()
+    assert artifact.filename == "upscaled_abcdef123456.mp4"
+    assert artifact.file_type == "output"

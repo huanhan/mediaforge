@@ -135,7 +135,11 @@ def test_generation_and_upscale_share_queue_and_release_before_switch(tmp_path: 
         def generation_output_factory(task_id: str, _: str | None) -> OutputArtifact:
             return OutputArtifact("result.mp4", "", tmp_path / f"{task_id}.mp4")
 
-        def upscale_output_factory(task_id: str, _: str | None) -> OutputArtifact:
+        def upscale_output_factory(
+            task_id: str,
+            _: str | None,
+            __: str,
+        ) -> OutputArtifact:
             return OutputArtifact("result.png", "", tmp_path / f"{task_id}.png")
 
         original_generate = video_runner.generate
@@ -195,7 +199,11 @@ def test_upscale_idle_timeout_releases_only_upscale_runner(tmp_path: Path) -> No
         def output_factory(task_id: str, _: str | None) -> OutputArtifact:
             return OutputArtifact("result.mp4", "", tmp_path / f"{task_id}.mp4")
 
-        def upscale_output_factory(task_id: str, _: str | None) -> OutputArtifact:
+        def upscale_output_factory(
+            task_id: str,
+            _: str | None,
+            __: str,
+        ) -> OutputArtifact:
             return OutputArtifact("result.png", "", tmp_path / f"{task_id}.png")
 
         manager = LocalTaskManager(

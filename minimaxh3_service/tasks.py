@@ -78,7 +78,7 @@ class LocalTaskManager:
         allow_interrupt_running: bool,
         idle_release_seconds: float = 5.0,
         upscale_runner: UpscaleRunner | None = None,
-        upscale_output_factory: Callable[[str, str | None], OutputArtifact] | None = None,
+        upscale_output_factory: Callable[[str, str | None, str], OutputArtifact] | None = None,
         upscale_idle_release_seconds: float = 5.0,
     ) -> None:
         self.runner = runner
@@ -151,13 +151,13 @@ class LocalTaskManager:
     async def submit_upscale(self, request: UpscaleRequest) -> UpscaleSubmission:
         if self.upscale_runner is None or self.upscale_output_factory is None:
             raise BackendError(
-                "image upscaling is not configured",
+                "upscaling is not configured",
                 status_code=503,
                 code="upscale_not_configured",
             )
         self._ensure_queue_space()
         task_id = uuid.uuid4().hex
-        output = self.upscale_output_factory(task_id, request.filename_prefix)
+        output = self.upscale_output_factory(task_id, request.filename_prefix, request.file_id)
         queue_number = self._queue_number()
         self.records[task_id] = _TaskRecord(
             task=BackendTask(
@@ -232,7 +232,7 @@ class LocalTaskManager:
         if kind == "generation":
             return self.runner
         if self.upscale_runner is None:
-            raise RuntimeError("image upscaling is not configured")
+            raise RuntimeError("upscaling is not configured")
         return self.upscale_runner
 
     async def _release(self, kind: TaskKind) -> bool:

@@ -8,7 +8,7 @@ from fastapi import UploadFile
 from .backend import BackendSubmission, BackendTask, StoredAsset, UpscaleSubmission
 from .backend import BackendError
 from .config import Settings
-from .models import GenerationRequest, UpscaleRequest
+from .models import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, GenerationRequest, UpscaleRequest
 from .native import NativeH3Runner
 from .storage import LocalAssetStore
 from .tasks import H3Runner, LocalTaskManager, UpscaleRunner
@@ -101,7 +101,13 @@ class LocalGenerationBackend:
                 code="upscale_not_ready",
                 detail=readiness,
             )
-        self.assets.resolve_input(request.file_id)
+        source = self.assets.resolve_input(request.file_id)
+        if source.suffix.lower() not in IMAGE_EXTENSIONS | VIDEO_EXTENSIONS:
+            raise BackendError(
+                "upscaling supports uploaded images and videos only",
+                status_code=415,
+                code="unsupported_upscale_media",
+            )
         return await self.tasks.submit_upscale(request)
 
     async def get_task(self, task_id: str) -> BackendTask | None:

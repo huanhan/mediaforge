@@ -21,8 +21,10 @@ from minimaxh3_service.models import GenerationRequest, UpscaleRequest
 class FakeLocalBackend:
     def __init__(self, output_file: Path) -> None:
         self.output_file = output_file
-        self.upscale_output_file = output_file.with_name("upscale-result.png")
+        self.upscale_output_file = output_file.with_name("restored-image.png")
+        self.upscale_video_output_file = output_file.with_name("restored-video.mp4")
         self.upscale_output_file.write_bytes(b"png")
+        self.upscale_video_output_file.write_bytes(b"upscaled-video")
         self.tasks: dict[str, BackendTask] = {}
         self.closed = False
 
@@ -91,7 +93,11 @@ class FakeLocalBackend:
         subfolder: str,
         file_type: Literal["input", "output", "temp"],
     ) -> Path:
-        return self.upscale_output_file if filename.endswith(".png") else self.output_file
+        if filename == self.upscale_output_file.name:
+            return self.upscale_output_file
+        if filename == self.upscale_video_output_file.name:
+            return self.upscale_video_output_file
+        return self.output_file
 
 
 def make_client(tmp_path: Path, *, api_key: str | None = None) -> tuple[TestClient, FakeLocalBackend]:
@@ -198,6 +204,45 @@ def test_upscale_submit_query_and_png_download(tmp_path: Path) -> None:
         assert payload["outputs"][0]["filename"] == "restored-image.png"
         assert payload["outputs"][0]["type"] == "output"
         assert client.get(payload["outputs"][0]["download_url"]).content == b"png"
+
+
+def test_upscale_video_submit_query_and_mp4_download(tmp_path: Path) -> None:
+    client, fake = make_client(tmp_path)
+    with client:
+        submitted = client.post(
+            "/v1/upscales",
+            json={
+                "file_id": "minimaxh3/20260822/generated.mp4",
+                "width": 1024,
+                "height": 768,
+                "seed": 7,
+                "filename_prefix": "restored/video",
+            },
+        )
+        assert submitted.status_code == 202
+        assert submitted.json()["id"] == "upscale-123"
+
+        fake.tasks["upscale-123"] = BackendTask(
+            id="upscale-123",
+            status="succeeded",
+            kind="upscale",
+            progress=1.0,
+            outputs=[
+                OutputArtifact(
+                    filename="restored-video.mp4",
+                    subfolder="upscale",
+                    path=fake.upscale_video_output_file,
+                )
+            ],
+        )
+        completed = client.get("/v1/tasks/upscale-123")
+        assert completed.status_code == 200
+        payload = completed.json()
+        assert payload["kind"] == "upscale"
+        assert payload["status"] == "succeeded"
+        assert payload["outputs"][0]["filename"] == "restored-video.mp4"
+        assert payload["outputs"][0]["type"] == "output"
+        assert client.get(payload["outputs"][0]["download_url"]).content == b"upscaled-video"
 
 
 def test_ready_reports_native_backend(tmp_path: Path) -> None:

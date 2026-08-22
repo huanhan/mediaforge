@@ -1,6 +1,6 @@
-# MiniMax H3 本地生成与图片超分服务
+# MiniMax H3 本地生成与图片/视频超分服务
 
-这是一个独立的本地 MiniMax H3 CUDA 视频生成和 SeedVR2 图片超分 API。服务直接加载模型权重，不启动 ComfyUI Web 服务，也不连接 8188 端口。
+这是一个独立的本地 MiniMax H3 CUDA 视频生成和 SeedVR2 图片/视频超分 API。服务直接加载模型权重，不启动 ComfyUI Web 服务，也不连接 8188 端口。
 
 推理实现复用固定版本的 ComfyUI 底层 `comfy` 推理内核，以保留 H3 原生节点已经验证的模型结构、联合音视频采样、量化权重和 DynamicVRAM/CPU offload；Web UI、图执行器、ComfyUI HTTP API 和队列均不参与运行。
 
@@ -9,7 +9,7 @@
 - `t2v`：文本生成带 32 kHz 立体声音频的视频
 - `fl2v`：首帧、尾帧或首尾帧生成视频
 - `ref2v`：参考图片、视频和音频生成视频，需要额外 Ref2V 权重
-- `upscale`：把已上传图片超分到指定宽高，使用 SeedVR2 3B FP8
+- `upscale`：把已上传图片或视频超分到指定宽高，使用 SeedVR2 3B FP8；视频保留原帧率和可用音频
 - 本地素材上传、单 GPU 任务队列、SSE 状态、取消以及 MP4/PNG 下载
 
 视频和超分严格共用一个 GPU 队列，不会并行占用同一张卡。连续同类任务会复用模型；切换任务类型时先释放上一类模型，队列空闲后再按各自配置的超时释放当前模型。
@@ -127,9 +127,9 @@ GET    /readyz
 
 任务成功后，`outputs[].download_url` 指向本地生成的 MP4。完整调用示例见 [examples/client.py](examples/client.py)。
 
-## 图片超分
+## 图片和视频超分
 
-先通过 `POST /v1/files` 上传图片，再提交目标尺寸：
+先通过 `POST /v1/files` 上传图片或视频，再提交目标尺寸。图片上传使用 `kind=image`，视频使用 `kind=video`；请求体和任务查询接口相同：
 
 ```powershell
 $body = @{
@@ -146,7 +146,7 @@ Invoke-RestMethod `
   -Body $body
 ```
 
-接口返回 HTTP `202`，包含任务 `id`、共享队列位置和目标宽高。后续继续使用 `GET /v1/tasks/{id}` 或 `/events` 查询；成功后 `outputs[].download_url` 指向 PNG。查询响应的 `kind` 为 `generation` 或 `upscale`。
+接口返回 HTTP `202`，包含任务 `id`、共享队列位置和目标宽高。后续继续使用 `GET /v1/tasks/{id}` 或 `/events` 查询；图片结果为 PNG，视频结果为 MP4。查询响应的 `kind` 为 `generation` 或 `upscale`。
 
 ## 首尾帧和参考素材
 

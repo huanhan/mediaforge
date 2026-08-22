@@ -9,6 +9,7 @@ from typing import Literal
 from fastapi import UploadFile
 
 from .backend import BackendError, OutputArtifact, StoredAsset
+from .models import VIDEO_EXTENSIONS
 
 
 def safe_upload_name(original_name: str | None) -> str:
@@ -99,13 +100,19 @@ class LocalAssetStore:
         self,
         task_id: str,
         filename_prefix: str | None = None,
+        source_file_id: str | None = None,
     ) -> OutputArtifact:
         prefix = (filename_prefix or "upscale/api").replace("\\", "/").strip("/")
         subfolder = str(Path(prefix).parent).replace("\\", "/")
         if subfolder == ".":
             subfolder = ""
         stem = Path(prefix).name
-        filename = f"{stem}_{task_id[:12]}.png"
+        suffix = (
+            ".mp4"
+            if Path(source_file_id or "").suffix.lower() in VIDEO_EXTENSIONS
+            else ".png"
+        )
+        filename = f"{stem}_{task_id[:12]}{suffix}"
         folder = _inside(self.output_root, self.output_root / subfolder, strict=False)
         folder.mkdir(parents=True, exist_ok=True)
         path = _inside(self.output_root, folder / filename, strict=False)
