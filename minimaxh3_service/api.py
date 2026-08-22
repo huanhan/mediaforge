@@ -15,14 +15,16 @@ from fastapi import (
     FastAPI,
     File,
     Form,
-    Header,
     HTTPException,
+    Path as PathParameter,
     Query,
     Request,
+    Security,
     UploadFile,
     status,
 )
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 from . import __version__
 from .backend import BackendError, BackendTask, GenerationBackend
@@ -32,8 +34,13 @@ from .models import (
     AUDIO_EXTENSIONS,
     IMAGE_EXTENSIONS,
     VIDEO_EXTENSIONS,
+    ErrorResponse,
     GenerationRequest,
+    HealthStatus,
+    MessageResponse,
+    ModelCatalog,
     OutputFile,
+    ReadinessStatus,
     SubmittedTask,
     SubmittedUpscaleTask,
     TaskStatus,
@@ -44,6 +51,37 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
+OPENAPI_TAGS = [
+    {"name": "health", "description": "Process health and local runtime readiness."},
+    {"name": "models", "description": "Installed models and generation/upscale capabilities."},
+    {"name": "files", "description": "Upload source media and download generated artifacts."},
+    {"name": "generation", "description": "Submit MiniMax H3 video generation tasks."},
+    {"name": "upscale", "description": "Submit SeedVR2 image or whole-video upscale tasks."},
+    {"name": "tasks", "description": "Query, stream, or cancel tasks from the shared GPU queue."},
+]
+API_KEY_AUTH = APIKeyHeader(
+    name="X-API-Key",
+    scheme_name="ApiKeyAuth",
+    description="API key configured through H3_API_KEY.",
+    auto_error=False,
+)
+BEARER_AUTH = HTTPBearer(
+    scheme_name="BearerAuth",
+    description="The same H3_API_KEY supplied as a Bearer token.",
+    auto_error=False,
+)
+AUTH_ERROR_RESPONSE = {
+    "model": MessageResponse,
+    "description": "The supplied API key is missing or invalid.",
+}
+BACKEND_ERROR_RESPONSE = {
+    "model": ErrorResponse,
+    "description": "The local inference backend rejected or failed the request.",
+}
+NOT_FOUND_RESPONSE = {
+    "model": MessageResponse,
+    "description": "The requested task or file does not exist.",
+}
 ALLOWED_EXTENSIONS = {
     "image": IMAGE_EXTENSIONS,
     "video": VIDEO_EXTENSIONS,
@@ -63,15 +101,15 @@ def _settings(request: Request) -> Settings:
 
 async def require_api_key(
     request: Request,
-    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
-    authorization: str | None = Header(default=None, alias="Authorization"),
+    x_api_key: str | None = Security(API_KEY_AUTH),
+    bearer: HTTPAuthorizationCredentials | None = Security(BEARER_AUTH),
 ) -> None:
     expected = _settings(request).api_key
     if not expected:
         return
     supplied = x_api_key
-    if authorization and authorization.lower().startswith("bearer "):
-        supplied = authorization[7:].strip()
+    if bearer is not None:
+        supplied = bearer.credentials
     if supplied is None or not hmac.compare_digest(supplied, expected):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid API key")
 
@@ -134,7 +172,26 @@ def create_app(
     application = FastAPI(
         title="MiniMax H3 Local API",
         version=__version__,
-        description="Local MiniMax H3 video generation and SeedVR2 image upscaling.",
+        summary="Local video generation and image/video upscaling on one GPU queue.",
+        description=(
+            "Generate audio-video clips with MiniMax H3 and upscale uploaded images or "
+            "whole videos with SeedVR2. Generation and upscale tasks share one GPU queue.\n\n"
+            "## Typical workflow\n"
+            "1. Upload required source media with `POST /v1/files`.\n"
+            "2. Submit `POST /v1/generations` or `POST /v1/upscales`.\n"
+            "3. Poll `GET /v1/tasks/{task_id}` or consume its SSE event stream.\n"
+            "4. Download successful outputs from `outputs[].download_url`.\n\n"
+            "Authentication is only enforced when `H3_API_KEY` is configured. Supply it "
+            "through `X-API-Key` or `Authorization: Bearer <key>`."
+        ),
+        openapi_tags=OPENAPI_TAGS,
+        openapi_url="/openapi.json",
+        docs_url="/docs",
+        redoc_url="/redoc",
+        swagger_ui_parameters={
+            "displayRequestDuration": True,
+            "persistAuthorization": True,
+        },
         lifespan=lifespan,
     )
 
@@ -152,11 +209,34 @@ def create_app(
             },
         )
 
-    @application.get("/healthz", tags=["health"])
-    async def healthz() -> dict[str, str]:
-        return {"status": "ok", "version": __version__}
+    @application.get(
+        "/healthz",
+        response_model=HealthStatus,
+        tags=["health"],
+        summary="Check process health",
+        description="Returns without loading or inspecting model resources.",
+        operation_id="health_check",
+    )
+    async def healthz() -> HealthStatus:
+        return HealthStatus(status="ok", version=__version__)
 
-    @application.get("/readyz", tags=["health"])
+    @application.get(
+        "/readyz",
+        response_model=ReadinessStatus,
+        tags=["health"],
+        summary="Check local runtime readiness",
+        description=(
+            "Reports installed runtimes, weights, CUDA state, and whether H3/SeedVR2 "
+            "resources are currently resident. Returns 503 when required assets are missing."
+        ),
+        operation_id="readiness_check",
+        responses={
+            503: {
+                "model": ReadinessStatus,
+                "description": "The local generation or upscale runtime is not ready.",
+            }
+        },
+    )
     async def readyz(request: Request) -> JSONResponse:
         readiness = await _backend(request).ready()
         ready = readiness.get("status") == "ready"
@@ -165,10 +245,21 @@ def create_app(
             content=readiness,
         )
 
-    router = APIRouter(prefix="/v1", dependencies=[Depends(require_api_key)])
+    router = APIRouter(
+        prefix="/v1",
+        dependencies=[Depends(require_api_key)],
+        responses={401: AUTH_ERROR_RESPONSE},
+    )
 
-    @router.get("/models", tags=["models"])
-    async def models(request: Request) -> dict[str, Any]:
+    @router.get(
+        "/models",
+        response_model=ModelCatalog,
+        tags=["models"],
+        summary="List models and capabilities",
+        description="Shows available generation modes and image/video upscale support.",
+        operation_id="list_models",
+    )
+    async def models(request: Request) -> ModelCatalog:
         modes = ["t2v", "fl2v"]
         ref2v_ready = service_settings.model_paths["ref2va"].is_file() and (
             not service_settings.enable_acceleration_lora
@@ -178,7 +269,7 @@ def create_app(
             modes.append("ref2v")
         readiness = await _backend(request).ready()
         upscale_readiness = readiness.get("upscale") or {"status": "unknown"}
-        return {
+        return ModelCatalog.model_validate({
             "id": "MiniMax-H3",
             "backend": "native",
             "models": service_settings.model_names,
@@ -207,18 +298,32 @@ def create_app(
                     "max_height": 8192,
                 },
             },
-        }
+        })
 
     @router.post(
         "/files",
         response_model=UploadedFile,
         status_code=status.HTTP_201_CREATED,
         tags=["files"],
+        summary="Upload source media",
+        description=(
+            "Stores an image, video, or audio file locally. Use the returned `file_id` in "
+            "generation and upscale requests."
+        ),
+        operation_id="upload_file",
+        response_description="The stored asset and reusable file_id.",
+        responses={
+            413: {"model": MessageResponse, "description": "The upload exceeds H3_MAX_UPLOAD_BYTES."},
+            415: {"model": MessageResponse, "description": "The extension is unsupported for kind."},
+        },
     )
     async def upload_file(
         request: Request,
-        kind: Literal["image", "video", "audio"] = Form(...),
-        file: UploadFile = File(...),
+        kind: Literal["image", "video", "audio"] = Form(
+            ...,
+            description="Declared media kind used to validate the filename extension.",
+        ),
+        file: UploadFile = File(..., description="Image, video, or audio file to store."),
     ) -> UploadedFile:
         extension = Path(file.filename or "").suffix.lower()
         if extension not in ALLOWED_EXTENSIONS[kind]:
@@ -243,6 +348,17 @@ def create_app(
         response_model=SubmittedTask,
         status_code=status.HTTP_202_ACCEPTED,
         tags=["generation"],
+        summary="Submit a video generation task",
+        description=(
+            "Queues a t2v, fl2v, or ref2v request on the shared GPU worker. Uploaded media "
+            "must be referenced by file_id."
+        ),
+        operation_id="create_generation",
+        response_description="Queued generation task metadata.",
+        responses={
+            429: BACKEND_ERROR_RESPONSE,
+            503: BACKEND_ERROR_RESPONSE,
+        },
     )
     async def create_generation(request: Request, body: GenerationRequest) -> SubmittedTask:
         submitted = await _backend(request).submit(body)
@@ -258,6 +374,18 @@ def create_app(
         response_model=SubmittedUpscaleTask,
         status_code=status.HTTP_202_ACCEPTED,
         tags=["upscale"],
+        summary="Submit an image or video upscale task",
+        description=(
+            "Queues SeedVR2 upscaling for an uploaded image or whole video. Video outputs "
+            "preserve the source frame rate and embedded audio when present."
+        ),
+        operation_id="create_upscale",
+        response_description="Queued upscale task metadata.",
+        responses={
+            415: BACKEND_ERROR_RESPONSE,
+            429: BACKEND_ERROR_RESPONSE,
+            503: BACKEND_ERROR_RESPONSE,
+        },
     )
     async def create_upscale(
         request: Request,
@@ -271,15 +399,53 @@ def create_app(
             height=submitted.height,
         )
 
-    @router.get("/tasks/{task_id}", response_model=TaskStatus, tags=["tasks"])
-    async def get_task(request: Request, task_id: str) -> TaskStatus:
+    @router.get(
+        "/tasks/{task_id}",
+        response_model=TaskStatus,
+        tags=["tasks"],
+        summary="Get task status",
+        description="Queries generation and upscale tasks through the same endpoint.",
+        operation_id="get_task",
+        responses={404: NOT_FOUND_RESPONSE},
+    )
+    async def get_task(
+        request: Request,
+        task_id: str = PathParameter(description="Task id returned by a submit endpoint."),
+    ) -> TaskStatus:
         return await _get_task(request, task_id)
 
-    @router.get("/tasks/{task_id}/events", tags=["tasks"])
+    @router.get(
+        "/tasks/{task_id}/events",
+        response_class=StreamingResponse,
+        tags=["tasks"],
+        summary="Stream task status events",
+        description=(
+            "Emits an SSE `status` event whenever the task representation changes, then "
+            "closes after a terminal status."
+        ),
+        operation_id="stream_task_events",
+        responses={
+            200: {
+                "description": "Server-sent task status events.",
+                "content": {
+                    "text/event-stream": {
+                        "schema": {"type": "string"},
+                        "example": "event: status\ndata: {\"id\":\"...\",\"status\":\"running\"}\n\n",
+                    }
+                },
+            },
+            404: NOT_FOUND_RESPONSE,
+        },
+    )
     async def task_events(
         request: Request,
-        task_id: str,
-        interval_seconds: float = Query(default=1.0, ge=0.25, le=30.0),
+        task_id: str = PathParameter(description="Task id returned by a submit endpoint."),
+        interval_seconds: float = Query(
+            default=1.0,
+            ge=0.25,
+            le=30.0,
+            description="Polling interval used by the SSE stream.",
+        ),
     ) -> StreamingResponse:
         async def event_stream() -> AsyncIterator[bytes]:
             previous: str | None = None
@@ -301,19 +467,73 @@ def create_app(
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
-    @router.delete("/tasks/{task_id}", response_model=TaskStatus, tags=["tasks"])
-    async def cancel_task(request: Request, task_id: str) -> TaskStatus:
+    @router.delete(
+        "/tasks/{task_id}",
+        response_model=TaskStatus,
+        tags=["tasks"],
+        summary="Cancel a task",
+        description=(
+            "Cancels queued tasks immediately. Running cancellation requires "
+            "H3_ALLOW_INTERRUPT_RUNNING=true."
+        ),
+        operation_id="cancel_task",
+        responses={
+            404: NOT_FOUND_RESPONSE,
+            409: BACKEND_ERROR_RESPONSE,
+        },
+    )
+    async def cancel_task(
+        request: Request,
+        task_id: str = PathParameter(description="Task id returned by a submit endpoint."),
+    ) -> TaskStatus:
         task = await _backend(request).cancel(task_id)
         if task is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="task not found")
         return _task_response(request, task)
 
-    @router.get("/files/content", name="download_file", tags=["files"])
+    @router.get(
+        "/files/content",
+        name="download_file",
+        response_class=FileResponse,
+        tags=["files"],
+        summary="Download a stored file",
+        description=(
+            "Downloads an input or output artifact. Successful task responses provide a "
+            "ready-to-use absolute download_url."
+        ),
+        operation_id="download_file",
+        responses={
+            200: {
+                "description": "Binary file content with its detected image/video/audio MIME type.",
+                "content": {
+                    "application/octet-stream": {
+                        "schema": {"type": "string", "format": "binary"}
+                    }
+                },
+            },
+            404: {
+                "model": ErrorResponse,
+                "description": "The stored file does not exist or is not exposed.",
+            },
+        },
+    )
     async def download_file(
         request: Request,
-        filename: str = Query(min_length=1, max_length=512),
-        subfolder: str = Query(default="", max_length=512),
-        file_type: Literal["input", "output", "temp"] = Query(default="output", alias="type"),
+        filename: str = Query(
+            min_length=1,
+            max_length=512,
+            description="Basename from an upload or task output.",
+        ),
+        subfolder: str = Query(
+            default="",
+            max_length=512,
+            description="Relative storage subfolder from an upload or task output.",
+        ),
+        file_type: Literal["input", "output", "temp"] = Query(
+            default="output",
+            alias="type",
+            description="Storage area. Temporary files are not exposed.",
+        ),
     ) -> FileResponse:
         path = _backend(request).resolve_file(
             filename=filename,

@@ -127,6 +127,23 @@ GET    /readyz
 
 任务成功后，`outputs[].download_url` 指向本地生成的 MP4。完整调用示例见 [examples/client.py](examples/client.py)。
 
+## Swagger / OpenAPI
+
+服务启动后可直接访问：
+
+- Swagger UI：`http://127.0.0.1:8000/docs`
+- ReDoc：`http://127.0.0.1:8000/redoc`
+- OpenAPI JSON：`http://127.0.0.1:8000/openapi.json`
+
+Swagger UI 支持使用 `X-API-Key` 或 Bearer Token 调试受保护接口。只有配置了 `H3_API_KEY` 时服务才会校验认证信息。
+
+仓库内的静态文档 [docs/openapi.json](docs/openapi.json) 可导入 Swagger Editor、Postman 或其他 OpenAPI 3.1 工具。修改接口后重新生成并检查：
+
+```powershell
+uv run minimaxh3-openapi
+uv run minimaxh3-openapi --check
+```
+
 ## 图片和视频超分
 
 先通过 `POST /v1/files` 上传图片或视频，再提交目标尺寸。图片上传使用 `kind=image`，视频使用 `kind=video`；请求体和任务查询接口相同：

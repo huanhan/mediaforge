@@ -4,7 +4,7 @@ import re
 from enum import StrEnum
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 
 MAX_CANVAS_PIXELS = 768 * 1344
@@ -28,9 +28,15 @@ class GenerationMode(StrEnum):
 
 
 class ReferenceVideo(BaseModel):
-    file_id: FileId
-    audio_file_id: FileId | None = None
-    include_source_audio: bool = True
+    file_id: FileId = Field(description="Uploaded reference video file_id.")
+    audio_file_id: FileId | None = Field(
+        default=None,
+        description="Optional uploaded audio file_id used instead of the video's audio.",
+    )
+    include_source_audio: bool = Field(
+        default=True,
+        description="Use the reference video's embedded audio when no audio_file_id is supplied.",
+    )
 
     @field_validator("file_id", "audio_file_id")
     @classmethod
@@ -39,23 +45,107 @@ class ReferenceVideo(BaseModel):
 
 
 class GenerationRequest(BaseModel):
-    prompt: str = Field(min_length=1, max_length=100_000)
-    mode: GenerationMode = GenerationMode.T2V
-    duration_seconds: float = Field(default=5.0, ge=4.0, le=15.0)
-    width: int = Field(default=1344, ge=32, le=8192)
-    height: int = Field(default=768, ge=32, le=8192)
-    seed: int | None = Field(default=None, ge=0, le=2**63 - 1)
-    steps: int = Field(default=20, ge=1, le=100)
-    sampler_name: str = Field(default="res_multistep", min_length=1, max_length=128)
-    scheduler: Literal["simple", "beta", "normal"] = "simple"
-    denoise: float = Field(default=1.0, gt=0.0, le=1.0)
-    first_frame: FileId | None = None
-    last_frame: FileId | None = None
-    reference_images: list[FileId] = Field(default_factory=list, max_length=9)
-    reference_videos: list[ReferenceVideo] = Field(default_factory=list, max_length=3)
-    reference_audios: list[FileId] = Field(default_factory=list, max_length=3)
-    ref_image_size: Literal["match", "max"] = "match"
-    filename_prefix: str | None = Field(default=None, max_length=240)
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "prompt": "A red paper airplane glides over a white tabletop.",
+                    "mode": "t2v",
+                    "duration_seconds": 4,
+                    "width": 608,
+                    "height": 352,
+                    "seed": 42,
+                    "steps": 8,
+                }
+            ]
+        }
+    )
+
+    prompt: str = Field(
+        min_length=1,
+        max_length=100_000,
+        description="Visual and audio generation prompt.",
+    )
+    mode: GenerationMode = Field(
+        default=GenerationMode.T2V,
+        description=(
+            "t2v accepts no media, fl2v requires first_frame and/or last_frame, "
+            "and ref2v requires uploaded reference images or videos."
+        ),
+    )
+    duration_seconds: float = Field(
+        default=5.0,
+        ge=4.0,
+        le=15.0,
+        description="Requested duration. The effective frame-aligned duration is returned.",
+    )
+    width: int = Field(
+        default=1344,
+        ge=32,
+        le=8192,
+        description="Output width; must be a multiple of 32.",
+    )
+    height: int = Field(
+        default=768,
+        ge=32,
+        le=8192,
+        description="Output height; must be a multiple of 32.",
+    )
+    seed: int | None = Field(
+        default=None,
+        ge=0,
+        le=2**63 - 1,
+        description="Optional deterministic seed. A random seed is used when omitted.",
+    )
+    steps: int = Field(default=20, ge=1, le=100, description="Sampling step count.")
+    sampler_name: str = Field(
+        default="res_multistep",
+        min_length=1,
+        max_length=128,
+        description="Comfy sampling algorithm name.",
+    )
+    scheduler: Literal["simple", "beta", "normal"] = Field(
+        default="simple",
+        description="Noise schedule.",
+    )
+    denoise: float = Field(
+        default=1.0,
+        gt=0.0,
+        le=1.0,
+        description="Denoising strength.",
+    )
+    first_frame: FileId | None = Field(
+        default=None,
+        description="Uploaded image file_id used as the first frame in fl2v mode.",
+    )
+    last_frame: FileId | None = Field(
+        default=None,
+        description="Uploaded image file_id used as the last frame in fl2v mode.",
+    )
+    reference_images: list[FileId] = Field(
+        default_factory=list,
+        max_length=9,
+        description="Uploaded reference image file_ids for ref2v mode.",
+    )
+    reference_videos: list[ReferenceVideo] = Field(
+        default_factory=list,
+        max_length=3,
+        description="Uploaded reference videos for ref2v mode.",
+    )
+    reference_audios: list[FileId] = Field(
+        default_factory=list,
+        max_length=3,
+        description="Uploaded standalone audio file_ids for ref2v mode.",
+    )
+    ref_image_size: Literal["match", "max"] = Field(
+        default="match",
+        description="Resize reference images to the output canvas or their maximum supported size.",
+    )
+    filename_prefix: str | None = Field(
+        default=None,
+        max_length=240,
+        description="Optional safe output path prefix relative to the output directory.",
+    )
 
     @field_validator("prompt")
     @classmethod
@@ -120,11 +210,36 @@ class GenerationRequest(BaseModel):
 
 
 class UpscaleRequest(BaseModel):
-    file_id: FileId
-    width: int = Field(ge=64, le=8192)
-    height: int = Field(ge=64, le=8192)
-    seed: int | None = Field(default=None, ge=0, le=2**63 - 1)
-    filename_prefix: str | None = Field(default=None, max_length=240)
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "file_id": "minimaxh3/20260822/source.mp4",
+                    "width": 1280,
+                    "height": 768,
+                    "seed": 42,
+                    "filename_prefix": "upscale/result",
+                }
+            ]
+        }
+    )
+
+    file_id: FileId = Field(
+        description="Image or video file_id returned by POST /v1/files."
+    )
+    width: int = Field(ge=64, le=8192, description="Exact output width in pixels.")
+    height: int = Field(ge=64, le=8192, description="Exact output height in pixels.")
+    seed: int | None = Field(
+        default=None,
+        ge=0,
+        le=2**63 - 1,
+        description="Optional deterministic SeedVR2 seed.",
+    )
+    filename_prefix: str | None = Field(
+        default=None,
+        max_length=240,
+        description="Optional safe output path prefix relative to the output directory.",
+    )
 
     @field_validator("file_id")
     @classmethod
@@ -143,41 +258,107 @@ class UpscaleRequest(BaseModel):
 
 
 class SubmittedTask(BaseModel):
-    id: str
+    id: str = Field(description="Task identifier used by all task endpoints.")
     status: Literal["queued"] = "queued"
-    queue_number: int | float | None = None
-    effective_duration_seconds: float
-    frame_count: int
+    queue_number: int | float | None = Field(
+        default=None,
+        description="One-based position in the shared GPU queue at submission time.",
+    )
+    effective_duration_seconds: float = Field(description="Frame-aligned output duration.")
+    frame_count: int = Field(description="Number of video frames to generate.")
 
 
 class SubmittedUpscaleTask(BaseModel):
-    id: str
+    id: str = Field(description="Task identifier used by all task endpoints.")
     status: Literal["queued"] = "queued"
-    queue_number: int | float | None = None
-    width: int
-    height: int
+    queue_number: int | float | None = Field(
+        default=None,
+        description="One-based position in the shared GPU queue at submission time.",
+    )
+    width: int = Field(description="Requested output width.")
+    height: int = Field(description="Requested output height.")
 
 
 class OutputFile(BaseModel):
-    filename: str
-    subfolder: str = ""
-    type: str = "output"
-    download_url: str
+    filename: str = Field(description="Output filename.")
+    subfolder: str = Field(default="", description="Output subfolder.")
+    type: str = Field(default="output", description="Storage area used by the download API.")
+    download_url: str = Field(description="Absolute URL for downloading the output.")
 
 
 class TaskStatus(BaseModel):
-    id: str
-    kind: Literal["generation", "upscale"] | None = None
-    status: Literal["queued", "running", "succeeded", "failed", "canceled", "unknown"]
-    progress: float | None = None
-    outputs: list[OutputFile] = Field(default_factory=list)
-    error: dict[str, Any] | str | None = None
-    raw_status: dict[str, Any] | None = None
+    id: str = Field(description="Task identifier.")
+    kind: Literal["generation", "upscale"] | None = Field(
+        default=None,
+        description="Task type. Both types use the same status endpoints.",
+    )
+    status: Literal["queued", "running", "succeeded", "failed", "canceled", "unknown"] = Field(
+        description="Current task state."
+    )
+    progress: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Best-effort progress from 0 to 1.",
+    )
+    outputs: list[OutputFile] = Field(
+        default_factory=list,
+        description="Downloadable artifacts, populated after success.",
+    )
+    error: dict[str, Any] | str | None = Field(
+        default=None,
+        description="Failure detail for failed tasks.",
+    )
+    raw_status: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional backend-specific status detail.",
+    )
 
 
 class UploadedFile(BaseModel):
-    file_id: str
-    filename: str
-    subfolder: str = ""
-    type: str = "input"
-    kind: Literal["image", "video", "audio"]
+    file_id: str = Field(description="Stable relative identifier used in generation/upscale requests.")
+    filename: str = Field(description="Stored filename.")
+    subfolder: str = Field(default="", description="Stored input subfolder.")
+    type: str = Field(default="input", description="Storage area.")
+    kind: Literal["image", "video", "audio"] = Field(description="Uploaded media kind.")
+
+
+class HealthStatus(BaseModel):
+    status: Literal["ok"] = Field(description="Process health state.")
+    version: str = Field(description="Service package version.")
+
+
+class ReadinessStatus(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    status: Literal["ready", "not_ready"] = Field(description="Overall readiness state.")
+    backend: str | None = Field(default=None, description="Generation backend name.")
+    models_loaded: bool | None = Field(
+        default=None,
+        description="Whether generation model resources are currently resident.",
+    )
+    upscale: dict[str, Any] | None = Field(
+        default=None,
+        description="SeedVR2 readiness and models_loaded state.",
+    )
+
+
+class ModelCatalog(BaseModel):
+    id: str = Field(description="Service model identifier.")
+    backend: str = Field(description="Inference backend type.")
+    models: dict[str, str] = Field(description="Configured local model filenames.")
+    capabilities: dict[str, Any] = Field(description="Generation and upscale capabilities.")
+
+
+class ErrorDetail(BaseModel):
+    code: str = Field(description="Stable machine-readable error code.")
+    message: str = Field(description="Human-readable error message.")
+    detail: Any = Field(default=None, description="Optional structured backend detail.")
+
+
+class ErrorResponse(BaseModel):
+    error: ErrorDetail
+
+
+class MessageResponse(BaseModel):
+    detail: str = Field(description="Human-readable HTTP error message.")

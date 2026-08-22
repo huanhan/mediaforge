@@ -1,0 +1,1552 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MiniMax H3 Local API",
+    "summary": "Local video generation and image/video upscaling on one GPU queue.",
+    "description": "Generate audio-video clips with MiniMax H3 and upscale uploaded images or whole videos with SeedVR2. Generation and upscale tasks share one GPU queue.\n\n## Typical workflow\n1. Upload required source media with `POST /v1/files`.\n2. Submit `POST /v1/generations` or `POST /v1/upscales`.\n3. Poll `GET /v1/tasks/{task_id}` or consume its SSE event stream.\n4. Download successful outputs from `outputs[].download_url`.\n\nAuthentication is only enforced when `H3_API_KEY` is configured. Supply it through `X-API-Key` or `Authorization: Bearer <key>`.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/healthz": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Check process health",
+        "description": "Returns without loading or inspecting model resources.",
+        "operationId": "health_check",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Check local runtime readiness",
+        "description": "Reports installed runtimes, weights, CUDA state, and whether H3/SeedVR2 resources are currently resident. Returns 503 when required assets are missing.",
+        "operationId": "readiness_check",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessStatus"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The local generation or upscale runtime is not ready.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/models": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "List models and capabilities",
+        "description": "Shows available generation modes and image/video upscale support.",
+        "operationId": "list_models",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelCatalog"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/files": {
+      "post": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Upload source media",
+        "description": "Stores an image, video, or audio file locally. Use the returned `file_id` in generation and upscale requests.",
+        "operationId": "upload_file",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_file"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "The stored asset and reusable file_id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadedFile"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The upload exceeds H3_MAX_UPLOAD_BYTES.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The extension is unsupported for kind.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/generations": {
+      "post": {
+        "tags": [
+          "generation"
+        ],
+        "summary": "Submit a video generation task",
+        "description": "Queues a t2v, fl2v, or ref2v request on the shared GPU worker. Uploaded media must be referenced by file_id.",
+        "operationId": "create_generation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Queued generation task metadata.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmittedTask"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/upscales": {
+      "post": {
+        "tags": [
+          "upscale"
+        ],
+        "summary": "Submit an image or video upscale task",
+        "description": "Queues SeedVR2 upscaling for an uploaded image or whole video. Video outputs preserve the source frame rate and embedded audio when present.",
+        "operationId": "create_upscale",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpscaleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Queued upscale task metadata.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmittedUpscaleTask"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/tasks/{task_id}": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Get task status",
+        "description": "Queries generation and upscale tasks through the same endpoint.",
+        "operationId": "get_task",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Task id returned by a submit endpoint.",
+              "title": "Task Id"
+            },
+            "description": "Task id returned by a submit endpoint."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested task or file does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Cancel a task",
+        "description": "Cancels queued tasks immediately. Running cancellation requires H3_ALLOW_INTERRUPT_RUNNING=true.",
+        "operationId": "cancel_task",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Task id returned by a submit endpoint.",
+              "title": "Task Id"
+            },
+            "description": "Task id returned by a submit endpoint."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested task or file does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tasks/{task_id}/events": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Stream task status events",
+        "description": "Emits an SSE `status` event whenever the task representation changes, then closes after a terminal status.",
+        "operationId": "stream_task_events",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Task id returned by a submit endpoint.",
+              "title": "Task Id"
+            },
+            "description": "Task id returned by a submit endpoint."
+          },
+          {
+            "name": "interval_seconds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 30.0,
+              "minimum": 0.25,
+              "description": "Polling interval used by the SSE stream.",
+              "default": 1.0,
+              "title": "Interval Seconds"
+            },
+            "description": "Polling interval used by the SSE stream."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Server-sent task status events.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "event: status\ndata: {\"id\":\"...\",\"status\":\"running\"}\n\n"
+              }
+            }
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested task or file does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/files/content": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Download a stored file",
+        "description": "Downloads an input or output artifact. Successful task responses provide a ready-to-use absolute download_url.",
+        "operationId": "download_file",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "filename",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512,
+              "description": "Basename from an upload or task output.",
+              "title": "Filename"
+            },
+            "description": "Basename from an upload or task output."
+          },
+          {
+            "name": "subfolder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "Relative storage subfolder from an upload or task output.",
+              "default": "",
+              "title": "Subfolder"
+            },
+            "description": "Relative storage subfolder from an upload or task output."
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "input",
+                "output",
+                "temp"
+              ],
+              "type": "string",
+              "description": "Storage area. Temporary files are not exposed.",
+              "default": "output",
+              "title": "Type"
+            },
+            "description": "Storage area. Temporary files are not exposed."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Binary file content with its detected image/video/audio MIME type.",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The stored file does not exist or is not exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_upload_file": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "image",
+              "video",
+              "audio"
+            ],
+            "title": "Kind",
+            "description": "Declared media kind used to validate the filename extension."
+          },
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "Image, video, or audio file to store."
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "file"
+        ],
+        "title": "Body_upload_file"
+      },
+      "ErrorDetail": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "Stable machine-readable error code."
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Human-readable error message."
+          },
+          "detail": {
+            "title": "Detail",
+            "description": "Optional structured backend detail."
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorDetail"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse"
+      },
+      "GenerationMode": {
+        "type": "string",
+        "enum": [
+          "t2v",
+          "fl2v",
+          "ref2v"
+        ],
+        "title": "GenerationMode"
+      },
+      "GenerationRequest": {
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Prompt",
+            "description": "Visual and audio generation prompt."
+          },
+          "mode": {
+            "$ref": "#/components/schemas/GenerationMode",
+            "description": "t2v accepts no media, fl2v requires first_frame and/or last_frame, and ref2v requires uploaded reference images or videos.",
+            "default": "t2v"
+          },
+          "duration_seconds": {
+            "type": "number",
+            "maximum": 15.0,
+            "minimum": 4.0,
+            "title": "Duration Seconds",
+            "description": "Requested duration. The effective frame-aligned duration is returned.",
+            "default": 5.0
+          },
+          "width": {
+            "type": "integer",
+            "maximum": 8192.0,
+            "minimum": 32.0,
+            "title": "Width",
+            "description": "Output width; must be a multiple of 32.",
+            "default": 1344
+          },
+          "height": {
+            "type": "integer",
+            "maximum": 8192.0,
+            "minimum": 32.0,
+            "title": "Height",
+            "description": "Output height; must be a multiple of 32.",
+            "default": 768
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 9.223372036854776e+18,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed",
+            "description": "Optional deterministic seed. A random seed is used when omitted."
+          },
+          "steps": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Steps",
+            "description": "Sampling step count.",
+            "default": 20
+          },
+          "sampler_name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Sampler Name",
+            "description": "Comfy sampling algorithm name.",
+            "default": "res_multistep"
+          },
+          "scheduler": {
+            "type": "string",
+            "enum": [
+              "simple",
+              "beta",
+              "normal"
+            ],
+            "title": "Scheduler",
+            "description": "Noise schedule.",
+            "default": "simple"
+          },
+          "denoise": {
+            "type": "number",
+            "maximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Denoise",
+            "description": "Denoising strength.",
+            "default": 1.0
+          },
+          "first_frame": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Frame",
+            "description": "Uploaded image file_id used as the first frame in fl2v mode."
+          },
+          "last_frame": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Frame",
+            "description": "Uploaded image file_id used as the last frame in fl2v mode."
+          },
+          "reference_images": {
+            "items": {
+              "type": "string",
+              "maxLength": 512,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 9,
+            "title": "Reference Images",
+            "description": "Uploaded reference image file_ids for ref2v mode."
+          },
+          "reference_videos": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceVideo"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Reference Videos",
+            "description": "Uploaded reference videos for ref2v mode."
+          },
+          "reference_audios": {
+            "items": {
+              "type": "string",
+              "maxLength": 512,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Reference Audios",
+            "description": "Uploaded standalone audio file_ids for ref2v mode."
+          },
+          "ref_image_size": {
+            "type": "string",
+            "enum": [
+              "match",
+              "max"
+            ],
+            "title": "Ref Image Size",
+            "description": "Resize reference images to the output canvas or their maximum supported size.",
+            "default": "match"
+          },
+          "filename_prefix": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 240
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename Prefix",
+            "description": "Optional safe output path prefix relative to the output directory."
+          }
+        },
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "title": "GenerationRequest",
+        "examples": [
+          {
+            "duration_seconds": 4,
+            "height": 352,
+            "mode": "t2v",
+            "prompt": "A red paper airplane glides over a white tabletop.",
+            "seed": 42,
+            "steps": 8,
+            "width": 608
+          }
+        ]
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthStatus": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok",
+            "title": "Status",
+            "description": "Process health state."
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "description": "Service package version."
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "version"
+        ],
+        "title": "HealthStatus"
+      },
+      "MessageResponse": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "Human-readable HTTP error message."
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "MessageResponse"
+      },
+      "ModelCatalog": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Service model identifier."
+          },
+          "backend": {
+            "type": "string",
+            "title": "Backend",
+            "description": "Inference backend type."
+          },
+          "models": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Models",
+            "description": "Configured local model filenames."
+          },
+          "capabilities": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Capabilities",
+            "description": "Generation and upscale capabilities."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "backend",
+          "models",
+          "capabilities"
+        ],
+        "title": "ModelCatalog"
+      },
+      "OutputFile": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "description": "Output filename."
+          },
+          "subfolder": {
+            "type": "string",
+            "title": "Subfolder",
+            "description": "Output subfolder.",
+            "default": ""
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "Storage area used by the download API.",
+            "default": "output"
+          },
+          "download_url": {
+            "type": "string",
+            "title": "Download Url",
+            "description": "Absolute URL for downloading the output."
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "download_url"
+        ],
+        "title": "OutputFile"
+      },
+      "ReadinessStatus": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "not_ready"
+            ],
+            "title": "Status",
+            "description": "Overall readiness state."
+          },
+          "backend": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backend",
+            "description": "Generation backend name."
+          },
+          "models_loaded": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Models Loaded",
+            "description": "Whether generation model resources are currently resident."
+          },
+          "upscale": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upscale",
+            "description": "SeedVR2 readiness and models_loaded state."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ReadinessStatus"
+      },
+      "ReferenceVideo": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "File Id",
+            "description": "Uploaded reference video file_id."
+          },
+          "audio_file_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio File Id",
+            "description": "Optional uploaded audio file_id used instead of the video's audio."
+          },
+          "include_source_audio": {
+            "type": "boolean",
+            "title": "Include Source Audio",
+            "description": "Use the reference video's embedded audio when no audio_file_id is supplied.",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id"
+        ],
+        "title": "ReferenceVideo"
+      },
+      "SubmittedTask": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Task identifier used by all task endpoints."
+          },
+          "status": {
+            "type": "string",
+            "const": "queued",
+            "title": "Status",
+            "default": "queued"
+          },
+          "queue_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queue Number",
+            "description": "One-based position in the shared GPU queue at submission time."
+          },
+          "effective_duration_seconds": {
+            "type": "number",
+            "title": "Effective Duration Seconds",
+            "description": "Frame-aligned output duration."
+          },
+          "frame_count": {
+            "type": "integer",
+            "title": "Frame Count",
+            "description": "Number of video frames to generate."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "effective_duration_seconds",
+          "frame_count"
+        ],
+        "title": "SubmittedTask"
+      },
+      "SubmittedUpscaleTask": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Task identifier used by all task endpoints."
+          },
+          "status": {
+            "type": "string",
+            "const": "queued",
+            "title": "Status",
+            "default": "queued"
+          },
+          "queue_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queue Number",
+            "description": "One-based position in the shared GPU queue at submission time."
+          },
+          "width": {
+            "type": "integer",
+            "title": "Width",
+            "description": "Requested output width."
+          },
+          "height": {
+            "type": "integer",
+            "title": "Height",
+            "description": "Requested output height."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "width",
+          "height"
+        ],
+        "title": "SubmittedUpscaleTask"
+      },
+      "TaskStatus": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Task identifier."
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "generation",
+                  "upscale"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind",
+            "description": "Task type. Both types use the same status endpoints."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed",
+              "canceled",
+              "unknown"
+            ],
+            "title": "Status",
+            "description": "Current task state."
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress",
+            "description": "Best-effort progress from 0 to 1."
+          },
+          "outputs": {
+            "items": {
+              "$ref": "#/components/schemas/OutputFile"
+            },
+            "type": "array",
+            "title": "Outputs",
+            "description": "Downloadable artifacts, populated after success."
+          },
+          "error": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "description": "Failure detail for failed tasks."
+          },
+          "raw_status": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Status",
+            "description": "Optional backend-specific status detail."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "TaskStatus"
+      },
+      "UploadedFile": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id",
+            "description": "Stable relative identifier used in generation/upscale requests."
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "description": "Stored filename."
+          },
+          "subfolder": {
+            "type": "string",
+            "title": "Subfolder",
+            "description": "Stored input subfolder.",
+            "default": ""
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "Storage area.",
+            "default": "input"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "image",
+              "video",
+              "audio"
+            ],
+            "title": "Kind",
+            "description": "Uploaded media kind."
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "filename",
+          "kind"
+        ],
+        "title": "UploadedFile"
+      },
+      "UpscaleRequest": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "File Id",
+            "description": "Image or video file_id returned by POST /v1/files."
+          },
+          "width": {
+            "type": "integer",
+            "maximum": 8192.0,
+            "minimum": 64.0,
+            "title": "Width",
+            "description": "Exact output width in pixels."
+          },
+          "height": {
+            "type": "integer",
+            "maximum": 8192.0,
+            "minimum": 64.0,
+            "title": "Height",
+            "description": "Exact output height in pixels."
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 9.223372036854776e+18,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed",
+            "description": "Optional deterministic SeedVR2 seed."
+          },
+          "filename_prefix": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 240
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename Prefix",
+            "description": "Optional safe output path prefix relative to the output directory."
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "width",
+          "height"
+        ],
+        "title": "UpscaleRequest",
+        "examples": [
+          {
+            "file_id": "minimaxh3/20260822/source.mp4",
+            "filename_prefix": "upscale/result",
+            "height": 768,
+            "seed": 42,
+            "width": 1280
+          }
+        ]
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "description": "API key configured through H3_API_KEY.",
+        "in": "header",
+        "name": "X-API-Key"
+      },
+      "BearerAuth": {
+        "type": "http",
+        "description": "The same H3_API_KEY supplied as a Bearer token.",
+        "scheme": "bearer"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "health",
+      "description": "Process health and local runtime readiness."
+    },
+    {
+      "name": "models",
+      "description": "Installed models and generation/upscale capabilities."
+    },
+    {
+      "name": "files",
+      "description": "Upload source media and download generated artifacts."
+    },
+    {
+      "name": "generation",
+      "description": "Submit MiniMax H3 video generation tasks."
+    },
+    {
+      "name": "upscale",
+      "description": "Submit SeedVR2 image or whole-video upscale tasks."
+    },
+    {
+      "name": "tasks",
+      "description": "Query, stream, or cancel tasks from the shared GPU queue."
+    }
+  ]
+}

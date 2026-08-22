@@ -54,6 +54,7 @@ local = [
 [project.scripts]
 minimaxh3 = "minimaxh3_service.__main__:main"
 minimaxh3-setup = "minimaxh3_service.setup_local:main"
+minimaxh3-openapi = "minimaxh3_service.export_openapi:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -285,3 +285,118 @@ def test_rejects_wrong_upload_extension(tmp_path: Path) -> None:
             files={"file": ("clip.mp4", b"video", "video/mp4")},
         )
         assert response.status_code == 415
+
+
+def _operation(spec: dict[str, Any], path: str, method: str) -> dict[str, Any]:
+    return spec["paths"][path][method]
+
+
+def _request_examples(
+    spec: dict[str, Any], path: str, method: str, schema_name: str
+) -> list[dict[str, Any]]:
+    schema = spec["components"]["schemas"][schema_name]
+    examples = schema.get("examples")
+    if not examples:
+        request_body = _operation(spec, path, method).get("requestBody", {})
+        content = request_body.get("content", {}).get("application/json", {})
+        examples = content.get("examples")
+    if isinstance(examples, dict):
+        examples = list(examples.values())
+    values: list[dict[str, Any]] = []
+    for example in examples or []:
+        value = (
+            example["value"]
+            if isinstance(example, dict) and "value" in example
+            else example
+        )
+        if isinstance(value, dict):
+            values.append(value)
+    return values
+
+
+def test_openapi_documents_routes_auth_and_media_contract(tmp_path: Path) -> None:
+    client, _ = make_client(tmp_path)
+    with client:
+        openapi_response = client.get("/openapi.json")
+        assert openapi_response.status_code == 200
+        assert client.get("/docs").status_code == 200
+        assert client.get("/redoc").status_code == 200
+
+    spec = openapi_response.json()
+    assert spec["info"]["title"]
+    description = f"{spec['info']['title']} {spec['info'].get('description', '')}".lower()
+    assert "video" in description
+    assert "generation" in description
+    assert "image" in description
+    assert "upscal" in description
+
+    expected_operation_ids = {
+        ("/healthz", "get"): "health_check",
+        ("/readyz", "get"): "readiness_check",
+        ("/v1/models", "get"): "list_models",
+        ("/v1/files", "post"): "upload_file",
+        ("/v1/generations", "post"): "create_generation",
+        ("/v1/upscales", "post"): "create_upscale",
+        ("/v1/tasks/{task_id}", "get"): "get_task",
+        ("/v1/tasks/{task_id}", "delete"): "cancel_task",
+        ("/v1/tasks/{task_id}/events", "get"): "stream_task_events",
+        ("/v1/files/content", "get"): "download_file",
+    }
+    actual_operation_ids = {
+        key: _operation(spec, *key)["operationId"] for key in expected_operation_ids
+    }
+    assert actual_operation_ids == expected_operation_ids
+    assert len(set(actual_operation_ids.values())) == len(actual_operation_ids)
+
+    schemes = spec["components"]["securitySchemes"]
+    assert {"ApiKeyAuth", "BearerAuth"}.issubset(schemes)
+    for (path, method), operation_id in expected_operation_ids.items():
+        operation = _operation(spec, path, method)
+        if path.startswith("/v1/"):
+            security = operation.get("security", [])
+            security_names = {name for requirement in security for name in requirement}
+            assert {"ApiKeyAuth", "BearerAuth"}.issubset(security_names), operation_id
+        else:
+            assert not operation.get("security"), operation_id
+
+    generation_examples = _request_examples(
+        spec, "/v1/generations", "post", "GenerationRequest"
+    )
+    assert any(example.get("prompt") and example.get("mode") for example in generation_examples)
+    upscale_examples = _request_examples(spec, "/v1/upscales", "post", "UpscaleRequest")
+    assert any(
+        example.get("file_id") and example.get("width") and example.get("height")
+        for example in upscale_examples
+    )
+
+    event_response = _operation(spec, "/v1/tasks/{task_id}/events", "get")["responses"]["200"]
+    event_content = event_response["content"]["text/event-stream"]
+    assert event_content["schema"] == {"type": "string"}
+
+    download_response = _operation(spec, "/v1/files/content", "get")["responses"]["200"]
+    binary_content = download_response["content"]["application/octet-stream"]
+    assert binary_content["schema"] == {"type": "string", "format": "binary"}
+
+
+def test_openapi_documents_business_error_statuses(tmp_path: Path) -> None:
+    client, _ = make_client(tmp_path)
+    with client:
+        response = client.get("/openapi.json")
+        assert response.status_code == 200
+    spec = response.json()
+
+    expected_errors = {
+        ("/readyz", "get"): {"503"},
+        ("/v1/files", "post"): {"401", "413", "415"},
+        ("/v1/generations", "post"): {"401", "429", "503"},
+        ("/v1/upscales", "post"): {"401", "415", "429", "503"},
+        ("/v1/tasks/{task_id}", "get"): {"401", "404"},
+        ("/v1/tasks/{task_id}", "delete"): {"401", "404"},
+        ("/v1/tasks/{task_id}/events", "get"): {"401", "404"},
+        ("/v1/files/content", "get"): {"401", "404"},
+    }
+    for route, statuses in expected_errors.items():
+        responses = _operation(spec, *route)["responses"]
+        assert statuses.issubset(responses), route
+        for status_code in statuses:
+            assert responses[status_code].get("description"), (route, status_code)
