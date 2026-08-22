@@ -21,9 +21,12 @@ class Settings:
     allow_interrupt_running: bool = False
     max_queue_size: int = 8
     idle_release_seconds: float = 5.0
+    upscale_idle_release_seconds: float = 5.0
 
     runtime_path: Path = Path(".runtime/ComfyUI")
+    upscale_runtime_path: Path = Path(".runtime/SeedVR2")
     model_root: Path = Path("models")
+    upscale_model_root: Path = Path("models/SEEDVR2")
     data_root: Path = Path("data")
     device: str = "cuda"
     reserve_vram_gb: float = 1.0
@@ -42,6 +45,13 @@ class Settings:
     video_vae: str = "minimax_h3_video_vae_fp16.safetensors"
     audio_vae: str = "minimax_h3_audio_vae_fp32.safetensors"
 
+    upscale_dit_model: str = "seedvr2_ema_3b_fp8_e4m3fn.safetensors"
+    upscale_vae_model: str = "ema_vae_fp16.safetensors"
+    upscale_blocks_to_swap: int = 16
+    upscale_vae_tile_size: int = 512
+    upscale_swap_io: bool = True
+    upscale_seed: int = 42
+
     @classmethod
     def from_env(cls) -> "Settings":
         defaults = cls()
@@ -56,8 +66,20 @@ class Settings:
             idle_release_seconds=float(
                 os.getenv("H3_IDLE_RELEASE_SECONDS", str(defaults.idle_release_seconds))
             ),
+            upscale_idle_release_seconds=float(
+                os.getenv(
+                    "H3_UPSCALE_IDLE_RELEASE_SECONDS",
+                    str(defaults.upscale_idle_release_seconds),
+                )
+            ),
             runtime_path=Path(os.getenv("H3_COMFY_CORE_PATH", str(defaults.runtime_path))),
+            upscale_runtime_path=Path(
+                os.getenv("H3_UPSCALE_RUNTIME_PATH", str(defaults.upscale_runtime_path))
+            ),
             model_root=Path(os.getenv("H3_MODEL_DIR", str(defaults.model_root))),
+            upscale_model_root=Path(
+                os.getenv("H3_UPSCALE_MODEL_DIR", str(defaults.upscale_model_root))
+            ),
             data_root=Path(os.getenv("H3_DATA_DIR", str(defaults.data_root))),
             device=os.getenv("H3_DEVICE", defaults.device),
             reserve_vram_gb=float(os.getenv("H3_RESERVE_VRAM_GB", str(defaults.reserve_vram_gb))),
@@ -76,6 +98,28 @@ class Settings:
             text_encoder=os.getenv("H3_TEXT_ENCODER", defaults.text_encoder),
             video_vae=os.getenv("H3_VIDEO_VAE", defaults.video_vae),
             audio_vae=os.getenv("H3_AUDIO_VAE", defaults.audio_vae),
+            upscale_dit_model=os.getenv(
+                "H3_UPSCALE_DIT_MODEL", defaults.upscale_dit_model
+            ),
+            upscale_vae_model=os.getenv(
+                "H3_UPSCALE_VAE_MODEL", defaults.upscale_vae_model
+            ),
+            upscale_blocks_to_swap=int(
+                os.getenv(
+                    "H3_UPSCALE_BLOCKS_TO_SWAP",
+                    str(defaults.upscale_blocks_to_swap),
+                )
+            ),
+            upscale_vae_tile_size=int(
+                os.getenv(
+                    "H3_UPSCALE_VAE_TILE_SIZE",
+                    str(defaults.upscale_vae_tile_size),
+                )
+            ),
+            upscale_swap_io=_env_bool(
+                "H3_UPSCALE_SWAP_IO", defaults.upscale_swap_io
+            ),
+            upscale_seed=int(os.getenv("H3_UPSCALE_SEED", str(defaults.upscale_seed))),
         )
 
     @property
@@ -110,3 +154,11 @@ class Settings:
     @property
     def output_root(self) -> Path:
         return self.data_root.expanduser().resolve() / "output"
+
+    @property
+    def upscale_model_paths(self) -> dict[str, Path]:
+        root = self.upscale_model_root.expanduser().resolve()
+        return {
+            "dit": root / self.upscale_dit_model,
+            "vae": root / self.upscale_vae_model,
+        }

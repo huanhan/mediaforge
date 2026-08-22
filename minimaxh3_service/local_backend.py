@@ -5,17 +5,23 @@ from typing import Literal
 
 from fastapi import UploadFile
 
-from .backend import BackendSubmission, BackendTask, StoredAsset
+from .backend import BackendSubmission, BackendTask, StoredAsset, UpscaleSubmission
 from .backend import BackendError
 from .config import Settings
-from .models import GenerationRequest
+from .models import GenerationRequest, UpscaleRequest
 from .native import NativeH3Runner
 from .storage import LocalAssetStore
-from .tasks import H3Runner, LocalTaskManager
+from .tasks import H3Runner, LocalTaskManager, UpscaleRunner
+from .upscale import SeedVR2UpscaleRunner
 
 
 class LocalGenerationBackend:
-    def __init__(self, settings: Settings, runner: H3Runner | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        runner: H3Runner | None = None,
+        upscale_runner: UpscaleRunner | None = None,
+    ) -> None:
         self.settings = settings
         self.assets = LocalAssetStore(
             settings.input_root,
@@ -23,12 +29,19 @@ class LocalGenerationBackend:
             settings.max_upload_bytes,
         )
         self.runner = runner or NativeH3Runner(settings, self.assets.resolve_input)
+        self.upscale_runner = upscale_runner or SeedVR2UpscaleRunner(
+            settings,
+            self.assets.resolve_input,
+        )
         self.tasks = LocalTaskManager(
             self.runner,
             self.assets.output_path,
             max_queue_size=settings.max_queue_size,
             allow_interrupt_running=settings.allow_interrupt_running,
             idle_release_seconds=settings.idle_release_seconds,
+            upscale_runner=self.upscale_runner,
+            upscale_output_factory=self.assets.upscale_output_path,
+            upscale_idle_release_seconds=settings.upscale_idle_release_seconds,
         )
 
     async def start(self) -> None:
@@ -39,7 +52,9 @@ class LocalGenerationBackend:
         await self.tasks.close()
 
     async def ready(self) -> dict:
-        return self.runner.readiness()
+        readiness = dict(self.runner.readiness())
+        readiness["upscale"] = self.upscale_runner.readiness()
+        return readiness
 
     async def upload(
         self,
@@ -76,6 +91,18 @@ class LocalGenerationBackend:
                 code="model_missing",
             )
         return await self.tasks.submit(request)
+
+    async def submit_upscale(self, request: UpscaleRequest) -> UpscaleSubmission:
+        readiness = self.upscale_runner.readiness()
+        if readiness.get("status") != "ready":
+            raise BackendError(
+                "local SeedVR2 runtime is not ready",
+                status_code=503,
+                code="upscale_not_ready",
+                detail=readiness,
+            )
+        self.assets.resolve_input(request.file_id)
+        return await self.tasks.submit_upscale(request)
 
     async def get_task(self, task_id: str) -> BackendTask | None:
         return self.tasks.get(task_id)

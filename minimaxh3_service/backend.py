@@ -6,10 +6,11 @@ from typing import Any, Literal, Protocol
 
 from fastapi import UploadFile
 
-from .models import GenerationRequest
+from .models import GenerationRequest, UpscaleRequest
 
 
 TaskState = Literal["queued", "running", "succeeded", "failed", "canceled", "unknown"]
+TaskKind = Literal["generation", "upscale"]
 
 
 class BackendError(RuntimeError):
@@ -51,10 +52,19 @@ class BackendSubmission:
     effective_duration_seconds: float
 
 
+@dataclass(frozen=True, slots=True)
+class UpscaleSubmission:
+    id: str
+    queue_number: int
+    width: int
+    height: int
+
+
 @dataclass(slots=True)
 class BackendTask:
     id: str
     status: TaskState
+    kind: TaskKind | None = None
     progress: float | None = None
     outputs: list[OutputArtifact] = field(default_factory=list)
     error: dict[str, Any] | str | None = None
@@ -76,6 +86,8 @@ class GenerationBackend(Protocol):
     ) -> StoredAsset: ...
 
     async def submit(self, request: GenerationRequest) -> BackendSubmission: ...
+
+    async def submit_upscale(self, request: UpscaleRequest) -> UpscaleSubmission: ...
 
     async def get_task(self, task_id: str) -> BackendTask | None: ...
 

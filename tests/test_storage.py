@@ -19,3 +19,12 @@ def test_output_path_stays_under_output_root(tmp_path: Path) -> None:
     artifact = store.output_path("abcdef1234567890", "jobs/result")
     assert artifact.path.parent == (tmp_path / "output" / "jobs").resolve()
     assert artifact.filename == "result_abcdef123456.mp4"
+
+
+def test_upscale_output_path_uses_png_and_stays_under_output_root(tmp_path: Path) -> None:
+    store = LocalAssetStore(tmp_path / "input", tmp_path / "output", 1024)
+    store.initialize()
+    artifact = store.upscale_output_path("abcdef1234567890", "jobs/upscaled")
+    assert artifact.path.parent == (tmp_path / "output" / "jobs").resolve()
+    assert artifact.filename == "upscaled_abcdef123456.png"
+    assert artifact.file_type == "output"

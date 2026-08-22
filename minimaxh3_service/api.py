@@ -28,7 +28,15 @@ from . import __version__
 from .backend import BackendError, BackendTask, GenerationBackend
 from .config import Settings
 from .local_backend import LocalGenerationBackend
-from .models import GenerationRequest, OutputFile, SubmittedTask, TaskStatus, UploadedFile
+from .models import (
+    GenerationRequest,
+    OutputFile,
+    SubmittedTask,
+    SubmittedUpscaleTask,
+    TaskStatus,
+    UploadedFile,
+    UpscaleRequest,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -87,6 +95,7 @@ def _task_response(request: Request, task: BackendTask) -> TaskStatus:
     ]
     return TaskStatus(
         id=task.id,
+        kind=task.kind,
         status=task.status,
         progress=task.progress,
         outputs=outputs,
@@ -122,13 +131,13 @@ def create_app(
     application = FastAPI(
         title="MiniMax H3 Local API",
         version=__version__,
-        description="A standalone local MiniMax H3 CUDA video generation service.",
+        description="Local MiniMax H3 video generation and SeedVR2 image upscaling.",
         lifespan=lifespan,
     )
 
     @application.exception_handler(BackendError)
     async def backend_error_handler(_: Request, exc: BackendError) -> JSONResponse:
-        logger.warning("Local H3 backend failed: %s", exc)
+        logger.warning("Local inference backend failed: %s", exc)
         return JSONResponse(
             status_code=exc.status_code,
             content={
@@ -156,7 +165,7 @@ def create_app(
     router = APIRouter(prefix="/v1", dependencies=[Depends(require_api_key)])
 
     @router.get("/models", tags=["models"])
-    async def models() -> dict[str, Any]:
+    async def models(request: Request) -> dict[str, Any]:
         modes = ["t2v", "fl2v"]
         ref2v_ready = service_settings.model_paths["ref2va"].is_file() and (
             not service_settings.enable_acceleration_lora
@@ -164,6 +173,8 @@ def create_app(
         )
         if ref2v_ready:
             modes.append("ref2v")
+        readiness = await _backend(request).ready()
+        upscale_readiness = readiness.get("upscale") or {"status": "unknown"}
         return {
             "id": "MiniMax-H3",
             "backend": "native",
@@ -177,6 +188,13 @@ def create_app(
                 "max_reference_videos": 3,
                 "max_reference_audios": 3,
                 "acceleration_lora": service_settings.enable_acceleration_lora,
+                "image_upscale": {
+                    "available": upscale_readiness.get("status") == "ready",
+                    "backend": upscale_readiness.get("backend", "seedvr2"),
+                    "model": service_settings.upscale_dit_model,
+                    "max_width": 8192,
+                    "max_height": 8192,
+                },
             },
         }
 
@@ -222,6 +240,24 @@ def create_app(
             queue_number=submitted.queue_number,
             effective_duration_seconds=submitted.effective_duration_seconds,
             frame_count=submitted.frame_count,
+        )
+
+    @router.post(
+        "/upscales",
+        response_model=SubmittedUpscaleTask,
+        status_code=status.HTTP_202_ACCEPTED,
+        tags=["upscale"],
+    )
+    async def create_upscale(
+        request: Request,
+        body: UpscaleRequest,
+    ) -> SubmittedUpscaleTask:
+        submitted = await _backend(request).submit_upscale(body)
+        return SubmittedUpscaleTask(
+            id=submitted.id,
+            queue_number=submitted.queue_number,
+            width=submitted.width,
+            height=submitted.height,
         )
 
     @router.get("/tasks/{task_id}", response_model=TaskStatus, tags=["tasks"])

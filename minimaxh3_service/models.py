@@ -116,12 +116,43 @@ class GenerationRequest(BaseModel):
         return self
 
 
+class UpscaleRequest(BaseModel):
+    file_id: FileId
+    width: int = Field(ge=64, le=8192)
+    height: int = Field(ge=64, le=8192)
+    seed: int | None = Field(default=None, ge=0, le=2**63 - 1)
+    filename_prefix: str | None = Field(default=None, max_length=240)
+
+    @field_validator("file_id")
+    @classmethod
+    def file_id_is_safe(cls, value: str) -> str:
+        return validate_file_id(value)
+
+    @field_validator("filename_prefix")
+    @classmethod
+    def filename_prefix_is_safe(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.replace("\\", "/").strip("/")
+        if not normalized or ".." in normalized.split("/") or not re.fullmatch(r"[\w./-]+", normalized):
+            raise ValueError("filename_prefix contains unsupported characters")
+        return normalized
+
+
 class SubmittedTask(BaseModel):
     id: str
     status: Literal["queued"] = "queued"
     queue_number: int | float | None = None
     effective_duration_seconds: float
     frame_count: int
+
+
+class SubmittedUpscaleTask(BaseModel):
+    id: str
+    status: Literal["queued"] = "queued"
+    queue_number: int | float | None = None
+    width: int
+    height: int
 
 
 class OutputFile(BaseModel):
@@ -133,6 +164,7 @@ class OutputFile(BaseModel):
 
 class TaskStatus(BaseModel):
     id: str
+    kind: Literal["generation", "upscale"] | None = None
     status: Literal["queued", "running", "succeeded", "failed", "canceled", "unknown"]
     progress: float | None = None
     outputs: list[OutputFile] = Field(default_factory=list)

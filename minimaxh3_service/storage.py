@@ -95,6 +95,22 @@ class LocalAssetStore:
         path = _inside(self.output_root, folder / filename, strict=False)
         return OutputArtifact(filename=filename, subfolder=subfolder, path=path)
 
+    def upscale_output_path(
+        self,
+        task_id: str,
+        filename_prefix: str | None = None,
+    ) -> OutputArtifact:
+        prefix = (filename_prefix or "upscale/api").replace("\\", "/").strip("/")
+        subfolder = str(Path(prefix).parent).replace("\\", "/")
+        if subfolder == ".":
+            subfolder = ""
+        stem = Path(prefix).name
+        filename = f"{stem}_{task_id[:12]}.png"
+        folder = _inside(self.output_root, self.output_root / subfolder, strict=False)
+        folder.mkdir(parents=True, exist_ok=True)
+        path = _inside(self.output_root, folder / filename, strict=False)
+        return OutputArtifact(filename=filename, subfolder=subfolder, path=path)
+
     def resolve_file(
         self,
         *,
