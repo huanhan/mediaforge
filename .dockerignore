@@ -1,12 +1,11 @@
-.env
-.git
-.idea
-.pytest_cache
-.venv
-.runtime
-models
-data
-result.mp4
-__pycache__
-tests
-examples
+# Only these build inputs can enter the Docker build context.
+**
+!Dockerfile
+!.dockerignore
+!pyproject.toml
+!uv.lock
+!README.md
+!minimaxh3_service/
+!minimaxh3_service/*.py
+!scripts/
+!scripts/package_runtime.py

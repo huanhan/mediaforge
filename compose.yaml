@@ -1,0 +1,25 @@
+services:
+  minimaxh3:
+    image: minimaxh3:0.1.0
+    build: .
+    gpus: all
+    ports:
+      - "${H3_BIND_ADDRESS:-127.0.0.1}:${H3_PUBLISHED_PORT:-8000}:8000"
+    environment:
+      H3_API_KEY: ${H3_API_KEY:-}
+      H3_VRAM_MODE: ${H3_VRAM_MODE:-dynamic}
+      H3_RESERVE_VRAM_GB: ${H3_RESERVE_VRAM_GB:-1.0}
+      H3_ENABLE_ACCELERATION_LORA: ${H3_ENABLE_ACCELERATION_LORA:-true}
+      H3_IDLE_RELEASE_SECONDS: ${H3_IDLE_RELEASE_SECONDS:-5.0}
+      H3_UPSCALE_IDLE_RELEASE_SECONDS: ${H3_UPSCALE_IDLE_RELEASE_SECONDS:-5.0}
+    volumes:
+      - type: bind
+        source: ${H3_MODELS_PATH:-./models}
+        target: /models
+        read_only: true
+      - type: bind
+        source: ${H3_DATA_PATH:-./data}
+        target: /data
+    shm_size: 8gb
+    restart: unless-stopped
+    stop_grace_period: 60s

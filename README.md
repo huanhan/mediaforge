@@ -27,7 +27,16 @@
 
 Ref2V 模型另外约 21 GB。RTX 4070 Ti 12GB 必须使用 DynamicVRAM 和 CPU offload，建议至少 64 GB 系统内存并留足页面文件。速度取决于分辨率、时长、系统内存和磁盘速度；默认只允许一个 GPU 任务同时执行。
 
-## 安装
+## 免安装发行包
+
+Windows x64 用户可直接解压发行 ZIP，按 [模型目录说明](docs/MODELS.md) 放置自行下载的模型，
+然后双击 `start.cmd`。无需安装 Python、Git 或 CUDA Toolkit，系统需已有 NVIDIA 驱动。
+双击 `check.cmd` 可检查运行环境和缺少的模型。镜像和 ZIP 均不包含模型权重、输入或输出数据。
+
+完整使用、Docker 导入和重新构建流程见 [发行说明](docs/DISTRIBUTION.md)。
+重新打包的简明步骤见 [打包构建说明](docs/BUILD.md)。
+
+## 源码安装
 
 需要 Windows/Linux、Python 3.13、Git、NVIDIA 驱动和 CUDA 可用的 PyTorch 2.8+。DynamicVRAM 依赖 PyTorch 2.8 或更高版本。
 
@@ -207,9 +216,13 @@ curl.exe -X POST http://127.0.0.1:8000/v1/files -F "kind=image" -F "file=@first.
 镜像包含本地推理依赖和固定推理内核，但模型通过卷挂载：
 
 ```bash
-docker build -t minimaxh3-local .
-docker run --rm --gpus all -p 8000:8000 -v /path/to/models:/models -v /path/to/data:/data minimaxh3-local
+docker compose up -d --build
 ```
+
+模型默认从 `./models` 只读挂载到 `/models`，输入和输出保存在宿主 `./data`。
+离线镜像可通过 `docker load -i dist/minimaxh3-0.1.0-linux-amd64.docker.tar` 导入，
+然后执行 `docker compose up -d --no-build --pull never`。
+详细目录和宿主要求见 [发行说明](docs/DISTRIBUTION.md)。
 
 ## 测试
 
