@@ -69,7 +69,7 @@ def build(output: Path, runtime_source: Path | None, vc_runtime: Path) -> Path:
         shutil.copy2(vc_runtime / filename, python_root / filename)
     requirements = package / "requirements-lock.txt"
     subprocess.run([
-        uv, "export", "--locked", "--extra", "local", "--no-dev", "--no-emit-project",
+        uv, "export", "--locked", "--extra", "local", "--extra", "ui", "--no-dev", "--no-emit-project",
         "--no-header", "--no-annotate", "--emit-index-url", "--output-file", str(requirements),
     ], cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
     subprocess.run([

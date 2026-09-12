@@ -41,7 +41,6 @@ def main() -> int:
 
     settings.model_root.mkdir(parents=True, exist_ok=True)
     settings.upscale_model_root.mkdir(parents=True, exist_ok=True)
-    print(f"MiniMax H3: http://127.0.0.1:{settings.port}/docs", flush=True)
     print(f"Models: {settings.model_root.resolve()}", flush=True)
     print(f"Data: {settings.data_root.resolve()}", flush=True)
     from minimaxh3_service.__main__ import main as serve

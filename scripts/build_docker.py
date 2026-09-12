@@ -7,6 +7,7 @@ import json
 import shutil
 import subprocess
 import tomllib
+from datetime import datetime
 from pathlib import Path
 
 
@@ -43,9 +44,22 @@ def build(output: Path, skip_build: bool) -> None:
     print(f"Built {archive} ({archive.stat().st_size:,} bytes)", flush=True)
 
 
-if __name__ == "__main__":
+def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=ROOT / "dist")
+    parser.add_argument("--output", type=Path,
+                        default=ROOT / "dist" / datetime.now().strftime("docker-%Y%m%d-%H%M%S-%f"))
     parser.add_argument("--skip-build", action="store_true", help="export an already-built release image")
     args = parser.parse_args()
-    build(args.output.resolve(), args.skip_build)
+    output = args.output.resolve()
+    print(f"Building Docker release. Output: {output}", flush=True)
+    try:
+        build(output, args.skip_build)
+    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+        print(f"Build failed: {exc}", flush=True)
+        print(f"Existing artifacts are preserved in: {output}", flush=True)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -95,6 +95,36 @@ Invoke-RestMethod http://127.0.0.1:8000/readyz | ConvertTo-Json -Depth 6
 
 ## 文本生成视频
 
+### Gradio 视频生成界面
+
+安装界面依赖后，只需启动一个服务，API 与 Gradio 共用同一个端口：
+
+```powershell
+uv sync --extra local --extra dev --extra ui
+uv run --extra ui minimaxh3
+```
+
+浏览器访问 `http://127.0.0.1:8000/ui/`，API 文档仍在 `http://127.0.0.1:8000/docs`。
+修改 `H3_PORT` 后，界面与 API 一起使用新端口。无需再启动 `minimaxh3-ui`。
+界面支持文生视频、首尾帧与参考素材生成，可调宽高、时长、随机种子、步数、
+采样器、调度器、去噪强度及输出前缀；支持自动刷新进度、取消、视频预览和下载。
+参考模式需要额外的 Ref2V 权重。宽高与素材数量沿用 API 的校验规则。
+
+界面自动连接本服务的监听端口。设置 `H3_API_KEY` 时，界面要求登录，用户名为 `h3`，
+密码为该 API Key；下载文件由服务携带认证获取。界面沿用服务的 `H3_HOST` 监听范围。
+未安装 `ui` 扩展时仍可单独运行 API。
+
+仅在需要独立客户端连接远程服务时，可选用
+`uv run --extra ui minimaxh3-ui --api-url http://server:8000 --port 7860`。
+独立客户端使用 `H3_BASE_URL` 和 `H3_API_KEY` 环境变量，默认只监听本机。
+
+界面顶部会显示服务可用模式与 Turbo 状态。Turbo 开启时会覆盖步数、采样器和调度器；
+需要自定义这些参数时，设置 `H3_ENABLE_ACCELERATION_LORA=false` 并重启 **API 服务**。
+随机种子留空时由界面生成，实际种子保存在“本次请求参数”中，便于复现。
+结果副本保存在系统临时目录的 `h3-ui-*` 文件夹，API 原始输出仍保存在服务的数据目录。
+
+### HTTP 调用
+
 ```powershell
 $body = @{
   mode = "t2v"

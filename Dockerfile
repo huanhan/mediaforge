@@ -26,7 +26,7 @@ RUN apt-get update \
 WORKDIR /app
 COPY pyproject.toml uv.lock README.md ./
 COPY minimaxh3_service ./minimaxh3_service
-RUN uv sync --locked --extra local --no-dev --no-editable --no-cache
+RUN uv sync --locked --extra local --extra ui --no-dev --no-editable --no-cache
 COPY scripts/package_runtime.py ./scripts/package_runtime.py
 RUN python scripts/package_runtime.py --output /opt/minimaxh3
 

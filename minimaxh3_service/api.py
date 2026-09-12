@@ -548,6 +548,13 @@ def create_app(
         )
 
     application.include_router(router)
+    # The optional UI shares this application's listener and backend lifecycle.
+    from importlib.util import find_spec
+
+    if find_spec("gradio") is not None:
+        from .ui import mount_ui
+
+        application = mount_ui(application, service_settings)
     return application
 
 

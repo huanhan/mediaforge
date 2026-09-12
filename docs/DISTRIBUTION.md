@@ -10,7 +10,7 @@ PyTorch 2.8、媒体编解码库、Visual C++ 运行库和固定版本推理后�
 1. 用 Windows 资源管理器或支持 ZIP64 的解压工具完整解压 ZIP 到可写目录。
 2. 按同目录 `MODELS.md` 下载并放置模型。
 3. 双击 `start.cmd`，保持控制台窗口开启。
-4. 打开 <http://127.0.0.1:8000/docs>，就绪状态为 <http://127.0.0.1:8000/readyz>。
+4. 打开视频界面 <http://127.0.0.1:8000/ui/>；API 文档为 <http://127.0.0.1:8000/docs>，就绪状态为 <http://127.0.0.1:8000/readyz>。
 
 双击 `check.cmd` 检查 CUDA、运行时及模型路径。模型缺失时服务仍可启动，
 对应生成接口返回未就绪；补齐模型后即可使用。关闭窗口或按 Ctrl+C 停止服务。
@@ -40,7 +40,7 @@ docker compose logs -f
 docker compose down
 ```
 
-默认地址为 <http://127.0.0.1:8000/docs>。可在 Compose 同目录的 `.env` 设置
+默认视频界面为 <http://127.0.0.1:8000/ui/>，API 文档为 <http://127.0.0.1:8000/docs>。可在 Compose 同目录的 `.env` 设置
 `H3_MODELS_PATH`、`H3_DATA_PATH`、`H3_PUBLISHED_PORT`、`H3_API_KEY`。
 `H3_BIND_ADDRESS=0.0.0.0` 可开放局域网访问。模型挂载为只读，数据挂载为可写。
 
