@@ -13,6 +13,7 @@ from typing import Any, Callable
 
 from .backend import OutputArtifact
 from .config import Settings
+from .memory import h3_memory_scope
 from .media import (
     load_audio,
     load_image,
@@ -198,6 +199,8 @@ class NativeH3Runner:
             "missing_optional_models": missing_optional_models,
             "devices": devices,
             "memory": {
+                "eager_chunk_rows": self.settings.eager_chunk_rows,
+                "eager_memory_fraction": self.settings.eager_memory_fraction,
                 "mode": self.settings.vram_mode,
                 "reserve_vram_gb": self.settings.reserve_vram_gb,
                 "dynamic_enabled": bool(
@@ -572,32 +575,35 @@ class NativeH3Runner:
                 else:
                     conditioning, latent = self._build_image_conditioning(plan)
                 progress(0.2)
-                samples = self._sample(plan, model, conditioning, latent, cancel, progress)
-                check_canceled()
+                with h3_memory_scope(
+                    core.torch, core.model_management.get_torch_device(), self.settings
+                ):
+                    samples = self._sample(plan, model, conditioning, latent, cancel, progress)
+                    check_canceled()
 
-                video_latent, audio_latent = samples.unbind()
-                images = self._video_vae.decode(video_latent)
-                check_canceled()
-                if images.ndim == 5:
-                    images = images.reshape(-1, images.shape[-3], images.shape[-2], images.shape[-1])
-                progress(0.9)
-                waveform = self._audio_vae.decode(audio_latent).movedim(-1, 1)
-                check_canceled()
-                standard_deviation = core.torch.std(waveform, dim=[1, 2], keepdim=True) * 5.0
-                standard_deviation[standard_deviation < 1.0] = 1.0
-                waveform /= standard_deviation
-                audio = {
-                    "waveform": waveform,
-                    "sample_rate": int(getattr(self._audio_vae, "audio_sample_rate", 32000)),
-                }
-                save_mp4(
-                    output.path,
-                    images,
-                    audio,
-                    fps=FPS,
-                    check_canceled=check_canceled,
-                )
-                progress(0.99)
+                    video_latent, audio_latent = samples.unbind()
+                    images = self._video_vae.decode(video_latent)
+                    check_canceled()
+                    if images.ndim == 5:
+                        images = images.reshape(-1, images.shape[-3], images.shape[-2], images.shape[-1])
+                    progress(0.9)
+                    waveform = self._audio_vae.decode(audio_latent).movedim(-1, 1)
+                    check_canceled()
+                    standard_deviation = core.torch.std(waveform, dim=[1, 2], keepdim=True) * 5.0
+                    standard_deviation[standard_deviation < 1.0] = 1.0
+                    waveform /= standard_deviation
+                    audio = {
+                        "waveform": waveform,
+                        "sample_rate": int(getattr(self._audio_vae, "audio_sample_rate", 32000)),
+                    }
+                    save_mp4(
+                        output.path,
+                        images,
+                        audio,
+                        fps=FPS,
+                        check_canceled=check_canceled,
+                    )
+                    progress(0.99)
         except Exception:
             failed = True
             raise

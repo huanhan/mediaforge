@@ -226,6 +226,8 @@ curl.exe -X POST http://127.0.0.1:8000/v1/files -F "kind=image" -F "file=@first.
 | `H3_DEVICE` | `cuda` | 推理设备 |
 | `H3_VRAM_MODE` | `dynamic` | `dynamic`、`lowvram`、`novram`、`highvram` 或 `cpu` |
 | `H3_RESERVE_VRAM_GB` | `1.0` | 为桌面和其他程序预留的显存 |
+| `H3_EAGER_CHUNK_ROWS` | `2048` | H3 CUDA eager 回退 INT8/RMS-RoPE 分块行数；0 关闭本优化 |
+| `H3_EAGER_MEMORY_FRACTION` | `0.7` | eager INT8 为默认后端时，采样及解码阶段的 PyTorch 显存预算比例；1 不额外限制，结束后恢复原值 |
 | `H3_ENABLE_ACCELERATION_LORA` | `true` | 启用官方 Turbo acceleration LoRA 和对应 8/4-step 采样参数 |
 | `H3_FL2VA_ACCELERATION_LORA` | `minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors` | T2V/FL2V acceleration LoRA 文件名 |
 | `H3_REF2VA_ACCELERATION_LORA` | `minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors` | Ref2V acceleration LoRA 文件名 |
@@ -291,3 +293,5 @@ uv run python examples/matrix_test.py `
 ```
 
 工具会先检查 `/readyz`，然后为每个任务下载并校验 MP4，最终写入 `matrix_results.csv` 和 `matrix_results.json`。分辨率必须是 32 的倍数，时长范围为 4-15 秒。可用 `--fail-fast` 在首个失败时停止，或用 `--timeout` 设置单任务超时。
+
+长视频的 eager 回退算子会产生大块临时张量；默认分块限制峰值，并保持完整时序注意力。此策略不改变帧数、分辨率或采样步数，不修改 ComfyUI/已安装算子，也不替换原生 CUDA/Triton 内核。显存比例仅约束 PyTorch 分配器，不包含全部 CUDA 分配；服务串行执行 GPU 任务，超分不使用该策略。12 GB RTX 4070 Ti 上已验证 1248×704、192 帧、4 步 Ref2V；更长视频仍需实测。
