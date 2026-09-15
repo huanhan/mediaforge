@@ -11,6 +11,7 @@ from urllib.parse import quote, urlencode
 
 from fastapi import (
     APIRouter,
+    Body,
     Depends,
     FastAPI,
     File,
@@ -36,6 +37,7 @@ from .models import (
     VIDEO_EXTENSIONS,
     ErrorResponse,
     GenerationRequest,
+    VideoEditRequest,
     HealthStatus,
     MessageResponse,
     ModelCatalog,
@@ -178,7 +180,7 @@ def create_app(
             "whole videos with SeedVR2. Generation and upscale tasks share one GPU queue.\n\n"
             "## Typical workflow\n"
             "1. Upload required source media with `POST /v1/files`.\n"
-            "2. Submit `POST /v1/generations` or `POST /v1/upscales`.\n"
+            "2. Submit `POST /v1/generations`, `POST /v1/edits` or `POST /v1/upscales`.\n"
             "3. Poll `GET /v1/tasks/{task_id}` or consume its SSE event stream.\n"
             "4. Download successful outputs from `outputs[].download_url`.\n\n"
             "Authentication is only enforced when `H3_API_KEY` is configured. Supply it "
@@ -266,7 +268,7 @@ def create_app(
             or service_settings.model_paths["ref2va_acceleration_lora"].is_file()
         )
         if ref2v_ready:
-            modes.extend(["ref2v", "edit"])
+            modes.append("ref2v")
         readiness = await _backend(request).ready()
         upscale_readiness = readiness.get("upscale") or {"status": "unknown"}
         return ModelCatalog.model_validate({
@@ -280,7 +282,7 @@ def create_app(
                     "segment_seconds": {"min": 4, "max": 15, "default": 10},
                     "overlap_frames_default": 48, "overlap_alignment": "floor to 17k+5",
                     "continuation": "fixed_latent_prefix"},
-                "edit": {"available": ref2v_ready, "audio_modes": ["generate", "preserve_source"]},
+                "edit": {"available": ref2v_ready, "endpoint": "/v1/edits", "audio_modes": ["generate", "preserve_source"]},
                 "fps": 24,
                 "audio": "32000 Hz stereo",
                 "max_reference_images": 9,
@@ -353,11 +355,10 @@ def create_app(
         response_model=SubmittedTask,
         status_code=status.HTTP_202_ACCEPTED,
         tags=["generation"],
-        summary="Submit a video generation task",
+        summary="视频生成 / 重叠分段",
         description=(
-            "Queues a t2v, fl2v, ref2v, or edit request on the shared GPU worker. "
-            "Enable segmentation for overlapping latent continuation and one merged output. Uploaded media "
-            "must be referenced by file_id."
+            "仅接受 t2v、fl2v、ref2v。可启用 segmentation 自动重叠分段。"
+            "视频编辑请使用独立 POST /v1/edits；此接口不再接受 mode=edit 或编辑专用字段。"
         ),
         operation_id="create_generation",
         response_description="Queued generation task metadata.",
@@ -366,13 +367,74 @@ def create_app(
             503: BACKEND_ERROR_RESPONSE,
         },
     )
-    async def create_generation(request: Request, body: GenerationRequest) -> SubmittedTask:
+    async def create_generation(
+        request: Request,
+        body: GenerationRequest = Body(openapi_examples={
+            "t2v": {
+                "summary": "文生视频（默认）",
+                "value": {"mode": "t2v", "prompt": "雨夜街道，镜头缓慢向前。Audio: rain.",
+                          "duration_seconds": 4, "width": 608, "height": 352, "seed": 42},
+            },
+            "segmented_t2v": {
+                "summary": "文生长视频：自动重叠分段",
+                "value": {"mode": "t2v", "prompt": "镜头持续缓慢穿过雨夜街道。Audio: steady rain.",
+                          "duration_seconds": 30, "width": 608, "height": 352, "seed": 42,
+                          "segmentation": {"enabled": True, "segment_seconds": 10, "overlap_frames": 48}},
+            },
+        }),
+    ) -> SubmittedTask:
         submitted = await _backend(request).submit(body)
         return SubmittedTask(
             id=submitted.id,
             queue_number=submitted.queue_number,
             effective_duration_seconds=submitted.effective_duration_seconds,
             frame_count=submitted.frame_count,
+            segment_count=submitted.segment_count,
+            actual_overlap_frames=submitted.actual_overlap_frames,
+        )
+
+    @router.post(
+        "/edits",
+        response_model=SubmittedTask,
+        status_code=status.HTTP_202_ACCEPTED,
+        tags=["editing"],
+        summary="视频编辑 / 角色迁移 / 换背景",
+        description=("上传源视频及可选参考图后提交。source_video 必填，不传 mode；"
+                     "编辑区间只填写 source_video.start_seconds / duration_seconds。"
+                     "与视频生成共用任务查询、取消和下载接口，支持重叠分段。"),
+        operation_id="create_edit",
+        responses={429: BACKEND_ERROR_RESPONSE, 503: BACKEND_ERROR_RESPONSE},
+    )
+    async def create_edit(
+        request: Request,
+        body: VideoEditRequest = Body(openapi_examples={
+            "edit_character": {
+                "summary": "视频编辑：角色替换 / 动作迁移",
+                "description": "上传源视频和角色图。未填写时长表示处理全部源视频；需要 Ref2V 权重。",
+                "value": {
+                          "prompt": "用 <Picture 1> 中的角色替换 <Video 1> 的主要人物，继承原动作、节奏和道具，保留原背景与镜头。",
+                          "source_video": {"file_id": "uploads/source.mp4"},
+                          "reference_images": ["uploads/character.png"],
+                          "width": 352, "height": 640, "audio_mode": "preserve_source", "seed": 358,
+                          "segmentation": {"enabled": True, "segment_seconds": 10, "overlap_frames": 48}},
+            },
+            "edit_background": {
+                "summary": "视频编辑：上传背景图换背景",
+                "description": "reference_images 在此作为背景参考；每张图的作用由提示词指定。",
+                "value": {
+                          "prompt": "<Picture 1> 仅用作目标背景。从第一帧到最后一帧，将 <Video 1> 的背景替换为图片中的场景，保留背景构图与色彩。保留原角色、动作、道具和镜头。不要渐变或延迟切换。",
+                          "source_video": {"file_id": "uploads/source.mp4"},
+                          "reference_images": ["uploads/background.png"],
+                          "width": 352, "height": 640, "audio_mode": "preserve_source", "seed": 358,
+                          "segmentation": {"enabled": True, "segment_seconds": 10, "overlap_frames": 48}},
+            },
+        }),
+    ) -> SubmittedTask:
+        submitted = await _backend(request).submit_edit(body)
+        return SubmittedTask(
+            id=submitted.id, queue_number=submitted.queue_number,
+            frame_count=submitted.frame_count,
+            effective_duration_seconds=submitted.effective_duration_seconds,
             segment_count=submitted.segment_count,
             actual_overlap_frames=submitted.actual_overlap_frames,
         )

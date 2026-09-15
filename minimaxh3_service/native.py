@@ -48,7 +48,6 @@ ACCELERATION_STEPS = {
     GenerationMode.T2V: 8,
     GenerationMode.FL2V: 8,
     GenerationMode.REF2V: 4,
-    GenerationMode.EDIT: 4,
 }
 ACCELERATION_SAMPLER = "euler"
 ACCELERATION_SCHEDULER = "simple"
@@ -311,7 +310,7 @@ class NativeH3Runner:
 
     def _load_diffusion_model(self, mode: GenerationMode) -> Any:
         core = self._import_core()
-        wanted = GenerationMode.REF2V if mode in {GenerationMode.REF2V, GenerationMode.EDIT} else GenerationMode.FL2V
+        wanted = GenerationMode.REF2V if mode == GenerationMode.REF2V else GenerationMode.FL2V
         if self._model is not None and self._model_mode == wanted:
             return self._model
         if self._model is not None:
@@ -608,8 +607,10 @@ class NativeH3Runner:
                     progress(SegmentProgress(0.1 + 0.89 * (index + value) / count, index + 1, count))
 
                 report(0)
-                updates = {"first_frame": plan.request.first_frame if index == 0 else None,
-                           "last_frame": plan.request.last_frame if index == count - 1 else None}
+                updates = {}
+                if plan.request.source_video is None:
+                    updates = {"first_frame": plan.request.first_frame if index == 0 else None,
+                               "last_frame": plan.request.last_frame if index == count - 1 else None}
                 source = plan.request.source_video
                 if source is not None:
                     available = source.duration_seconds - window.start_frame / FPS
@@ -624,7 +625,7 @@ class NativeH3Runner:
                 segment = GenerationPlan(request, plan.seed, window.frame_count)
                 with h3_memory_scope(core.torch, core.model_management.get_torch_device(), self.settings,
                                      model.model.diffusion_model, check_canceled):
-                    if request.mode in {GenerationMode.REF2V, GenerationMode.EDIT}:
+                    if request.mode == GenerationMode.REF2V:
                         conditioning, latent = self._build_reference_conditioning(segment, check_canceled=check_canceled)
                     else:
                         conditioning, latent = self._build_image_conditioning(segment)

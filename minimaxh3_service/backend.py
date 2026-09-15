@@ -6,7 +6,7 @@ from typing import Any, Literal, Protocol
 
 from fastapi import UploadFile
 
-from .models import GenerationRequest, UpscaleRequest
+from .models import GenerationRequest, VideoEditRequest, UpscaleRequest
 
 
 TaskState = Literal["queued", "running", "succeeded", "failed", "canceled", "unknown"]
@@ -88,6 +88,8 @@ class GenerationBackend(Protocol):
     ) -> StoredAsset: ...
 
     async def submit(self, request: GenerationRequest) -> BackendSubmission: ...
+
+    async def submit_edit(self, request: VideoEditRequest) -> BackendSubmission: ...
 
     async def submit_upscale(self, request: UpscaleRequest) -> UpscaleSubmission: ...
 

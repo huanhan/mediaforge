@@ -3,7 +3,7 @@ from __future__ import annotations
 import secrets
 from dataclasses import dataclass
 
-from .models import GenerationMode, GenerationRequest
+from .models import GenerationRequest, VideoEditRequest
 
 
 def frame_count_for_duration(duration_seconds: float) -> int:
@@ -21,7 +21,7 @@ class SegmentWindow:
 
 @dataclass(frozen=True, slots=True)
 class GenerationPlan:
-    request: GenerationRequest
+    request: GenerationRequest | VideoEditRequest
     seed: int
     frame_count: int
     segments: tuple[SegmentWindow, ...] = ()
@@ -32,12 +32,12 @@ class GenerationPlan:
         return self.frame_count / 24
 
 
-def build_plan(request: GenerationRequest) -> GenerationPlan:
+def build_plan(request: GenerationRequest | VideoEditRequest) -> GenerationPlan:
     duration = request.duration_seconds
     if request.source_video and request.source_video.duration_seconds is not None:
         duration = request.source_video.duration_seconds
     segmented = request.segmentation.enabled
-    exact = segmented or request.mode == GenerationMode.EDIT
+    exact = segmented or isinstance(request, VideoEditRequest)
     # A last-frame anchor must remain at the final decoded frame, never in padding that is trimmed.
     total = round(duration * 24) if exact and not request.last_frame else frame_count_for_duration(duration)
     windows = []

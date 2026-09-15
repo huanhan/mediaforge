@@ -16,7 +16,7 @@ from .backend import (
     TaskKind,
     UpscaleSubmission,
 )
-from .models import GenerationRequest, UpscaleRequest
+from .models import GenerationRequest, VideoEditRequest, UpscaleRequest
 from .workflow import GenerationPlan, SegmentProgress, build_plan
 
 
@@ -123,7 +123,7 @@ class LocalTaskManager:
         if self.queue.full():
             raise BackendError("GPU task queue is full", status_code=429, code="queue_full")
 
-    async def submit(self, request: GenerationRequest) -> BackendSubmission:
+    async def submit(self, request: GenerationRequest | VideoEditRequest) -> BackendSubmission:
         self._ensure_queue_space()
         plan = build_plan(request)
         task_id = uuid.uuid4().hex

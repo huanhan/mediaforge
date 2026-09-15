@@ -15,10 +15,14 @@ from minimaxh3_service.backend import (
     UpscaleSubmission,
 )
 from minimaxh3_service.config import Settings
-from minimaxh3_service.models import GenerationRequest, UpscaleRequest
+from minimaxh3_service.models import GenerationRequest, UpscaleRequest, VideoEditRequest
 
 
 class FakeLocalBackend:
+    async def submit_edit(self, request: VideoEditRequest) -> BackendSubmission:
+        self.edit_request = request
+        return await self.submit(request)
+
     def __init__(self, output_file: Path) -> None:
         self.output_file = output_file
         self.upscale_output_file = output_file.with_name("restored-image.png")
@@ -400,3 +404,26 @@ def test_openapi_documents_business_error_statuses(tmp_path: Path) -> None:
         assert statuses.issubset(responses), route
         for status_code in statuses:
             assert responses[status_code].get("description"), (route, status_code)
+
+
+def test_independent_edit_contract(tmp_path):
+    client, fake = make_client(tmp_path)
+    with client:
+        payload = {"prompt": "Replace background", "source_video": {"file_id": "source.mp4"}}
+        assert client.post("/v1/edits", json=payload).status_code == 202
+        assert isinstance(fake.edit_request, VideoEditRequest)
+        assert fake.edit_request.audio_mode == "preserve_source"
+        for extra in ({"mode": "edit"}, {"duration_seconds": 8}, {"first_frame": "f.png"},
+                      {"reference_videos": []}, {"reference_audios": []}):
+            assert client.post("/v1/edits", json={**payload, **extra}).status_code == 422
+        assert client.post("/v1/edits", json={"prompt": "x"}).status_code == 422
+        for extra in ({"mode": "edit"}, {"source_video": {"file_id": "s.mp4"}},
+                      {"audio_mode": "generate"}):
+            assert client.post("/v1/generations", json={"prompt": "x", **extra}).status_code == 422
+        schema = client.get("/openapi.json").json()
+        for path, model in (("/v1/edits", VideoEditRequest), ("/v1/generations", GenerationRequest)):
+            content = schema["paths"][path]["post"]["requestBody"]["content"]["application/json"]
+            assert content["schema"]["$ref"].endswith("/" + model.__name__)
+            for example in content["examples"].values():
+                model.model_validate(example["value"])
+        assert "edit" not in schema["components"]["schemas"]["GenerationMode"]["enum"]

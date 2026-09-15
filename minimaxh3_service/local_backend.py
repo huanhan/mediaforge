@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from pathlib import Path
 from typing import Literal
 
@@ -9,12 +10,21 @@ from fastapi import UploadFile
 from .backend import BackendSubmission, BackendTask, StoredAsset, UpscaleSubmission
 from .backend import BackendError
 from .config import Settings
-from .models import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, GenerationRequest, UpscaleRequest
+from .models import MAX_CANVAS_PIXELS, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, GenerationRequest, VideoEditRequest, UpscaleRequest
 from .native import NativeH3Runner
-from .media import video_duration
+from .media import video_dimensions, video_duration
 from .storage import LocalAssetStore
 from .tasks import H3Runner, LocalTaskManager, UpscaleRunner
 from .upscale import SeedVR2UpscaleRunner
+
+
+def source_canvas(width: int, height: int) -> tuple[int, int]:
+    """Fit source dimensions to H3 limits, then round down to the 32-pixel grid."""
+    if width <= 0 or height <= 0:
+        raise ValueError("source video has invalid dimensions")
+    scale = min(1.0, 8192 / width, 8192 / height,
+                math.sqrt(MAX_CANVAS_PIXELS / (width * height)))
+    return max(32, int(width * scale) // 32 * 32), max(32, int(height * scale) // 32 * 32)
 
 
 class LocalGenerationBackend:
@@ -67,6 +77,12 @@ class LocalGenerationBackend:
         return await self.assets.store_upload(upload, kind=kind)
 
     async def submit(self, request: GenerationRequest) -> BackendSubmission:
+        return await self._submit_video(request)
+
+    async def submit_edit(self, request: VideoEditRequest) -> BackendSubmission:
+        return await self._submit_video(request)
+
+    async def _submit_video(self, request: GenerationRequest | VideoEditRequest) -> BackendSubmission:
         readiness = self.runner.readiness()
         if readiness.get("status") != "ready":
             raise BackendError(
@@ -75,14 +91,14 @@ class LocalGenerationBackend:
                 code="not_ready",
                 detail=readiness,
             )
-        if request.mode.value in {"ref2v", "edit"} and not self.settings.model_paths["ref2va"].is_file():
+        if request.mode.value == "ref2v" and not self.settings.model_paths["ref2va"].is_file():
             raise BackendError(
                 "Ref2V model is not installed; rerun minimaxh3-setup with --with-ref2v",
                 status_code=503,
                 code="model_missing",
             )
         if (
-            request.mode.value in {"ref2v", "edit"}
+            request.mode.value == "ref2v"
             and self.settings.enable_acceleration_lora
             and not self.settings.model_paths["ref2va_acceleration_lora"].is_file()
         ):
@@ -101,14 +117,16 @@ class LocalGenerationBackend:
                 remaining = available - request.source_video.start_seconds
                 duration = request.source_video.duration_seconds
                 if duration is None:
-                    duration = request.duration_seconds if "duration_seconds" in request.model_fields_set else remaining
+                    duration = remaining
                 if duration > remaining + 1 / 24 or remaining < 4:
                     raise ValueError("source_video interval exceeds the available video or is shorter than 4 seconds")
                 duration = min(duration, remaining)
                 data = request.model_dump()
-                data["duration_seconds"] = duration
                 data["source_video"]["duration_seconds"] = duration
-                request = GenerationRequest.model_validate(data)
+                if request.width is None:
+                    dimensions = await asyncio.to_thread(video_dimensions, source)
+                    data["width"], data["height"] = source_canvas(*dimensions)
+                request = VideoEditRequest.model_validate(data)
             except (ValueError, OSError) as exc:
                 raise BackendError(str(exc), status_code=422, code="invalid_source_video") from exc
         return await self.tasks.submit(request)

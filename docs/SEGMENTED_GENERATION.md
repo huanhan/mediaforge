@@ -1,6 +1,6 @@
 # 视频编辑与重叠分段生成
 
-使用现有 `POST /v1/generations`。上游上传素材后只提交一次任务；服务内部切片、
+视频生成使用 `POST /v1/generations`，视频编辑使用独立的 `POST /v1/edits`。上游上传素材后只提交一次任务；服务内部切片、
 传递上一段的重叠 latent、采样、裁掉重复画面并输出一个 MP4。无需 ComfyUI 服务或 JSON 工作流。
 重启 API 服务后生效。Gradio `/ui/` 已提供视频编辑与分段控件；
 上游流程和场景请求见 [对接指南](INTEGRATION.md)，字段定义见 Swagger `/docs`。
@@ -12,7 +12,6 @@
 
 ```json
 {
-  "mode": "edit",
   "prompt": "将主要人物替换为 <Picture 1> 中的男子，保留 <Video 1> 的舞蹈动作、镜头、节奏和背景。",
   "source_video": {
     "file_id": "上传返回的视频file_id",
@@ -32,14 +31,14 @@
 }
 ```
 
-`edit` 使用现有 Ref2V 权重和对应 Turbo LoRA，需要安装 `--with-ref2v`。
+视频编辑使用现有 Ref2V 权重和对应 Turbo LoRA，需要安装 `--with-ref2v`。
 它把源片段与图片作为参考条件重新生成，不保证背景逐像素不变，也不等同于蒙版局部编辑。
 这不是 `qianyi.json` 中融合权重及插件的逐项复刻。
 
 源视频规则：
 
 - `start_seconds` 默认为 0。
-- `source_video.duration_seconds` 省略时，使用顶层 `duration_seconds`；两处都省略时处理剩余整段视频。
+- `source_video.duration_seconds` 省略时处理剩余整段视频。编辑接口不接受顶层 `duration_seconds` 和 `mode`。
 - 两处同时填写时必须相等。源区间必须存在，时长 4–600 秒；超过 15 秒须明确开启分段。
 - 编辑只接受一个 `source_video` 和最多 9 张 `reference_images`，不混入首尾帧或其他参考视频/音频。
 - 源视频按输出尺寸、24 FPS 解码；末段不足 H3 网格的部分重复末帧作为参考补齐，最终裁掉多余生成帧。
@@ -65,7 +64,7 @@
 ```
 
 `fl2v` 的首帧仅用于第一段，尾帧仅用于最后一段。有尾帧时，总时长向上对齐 H3 帧数，
-确保尾帧不会被最终裁剪丢弃。`ref2v` 每段重复使用同一批参考素材；按源时间线移动切片请用 `edit`。
+确保尾帧不会被最终裁剪丢弃。`ref2v` 每段重复使用同一批参考素材；按源时间线移动切片请用 `POST /v1/edits`。
 
 ## 对齐与进度
 
@@ -107,3 +106,5 @@
 
 `GET /v1/models` 的 `capabilities.segmentation` 返回能力与时长限制。
 未启用分段的原有生成请求仍保持 4–15 秒和原有帧数对齐行为。
+
+编辑接口宽高同时省略或传 null 时自动采用源视频尺寸，超限等比例缩小后向下对齐至 32 的倍数（最小 32）；自定义须同时填写宽高。Gradio 编辑页默认留空使用此逻辑。

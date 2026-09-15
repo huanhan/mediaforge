@@ -12,7 +12,8 @@ def callback(demo, name):
 
 
 @pytest.mark.parametrize("whole", [True, False])
-def test_edit_ui_uploads_source_and_background_and_preserves_duration_omission(tmp_path, whole):
+@pytest.mark.parametrize("canvas", [(352, 640), (None, None)])
+def test_edit_ui_uploads_source_and_background_and_preserves_duration_omission(tmp_path, whole, canvas):
     pytest.importorskip("gradio")
     source, background = tmp_path / "source.mp4", tmp_path / "background.png"
     source.write_bytes(b"video")
@@ -21,24 +22,27 @@ def test_edit_ui_uploads_source_and_background_and_preserves_duration_omission(t
 
     def handle(request):
         if request.url.path == "/v1/models":
-            return httpx.Response(200, json={"capabilities": {"modes": ["edit"], "segmentation": {"available": True}}})
+            return httpx.Response(200, json={"capabilities": {"edit": {"available": True, "endpoint": "/v1/edits"}, "segmentation": {"available": True}}})
         if request.url.path == "/v1/files":
             data = request.read()
             kind = "video" if b"source.mp4" in data else "image"
             assert f"\r\n\r\n{kind}\r\n".encode() in data
             uploaded.append(kind)
             return httpx.Response(201, json={"file_id": "uploads/" + kind})
+        assert request.url.path == "/v1/edits"
         payload = json.loads(request.content)
         submitted.append(payload)
         return httpx.Response(202, json={"id": "edit-test", "effective_duration_seconds": 30,
                                        "frame_count": 720, "segment_count": 4, "actual_overlap_frames": 39})
 
     demo = build_ui(VideoClient("http://test", transport=httpx.MockTransport(handle)))
-    result = callback(demo, "submit")("Replace background", "edit", 4, 352, 640, "358", 20,
-        "res_multistep", "simple", 1, None, None, None, None, None, None, True, "match",
-        str(source), [str(background)], 2, whole, 30, "preserve_source", True, 10, 48)
+    result = callback(demo, "edit_submit")("Replace background", str(source), [str(background)],
+        2, whole, 30, "preserve_source", *canvas, "358", 20,
+        "res_multistep", "simple", 1, None, "match", True, 10, 48)
     assert uploaded == ["video", "image"]
     body = submitted[0]
+    assert (body.get("width"), body.get("height")) == canvas
+    assert "mode" not in body
     assert "duration_seconds" not in body
     assert body["source_video"]["file_id"] == "uploads/video"
     assert body["source_video"]["start_seconds"] == 2
@@ -57,7 +61,7 @@ def test_old_server_is_rejected_before_upload(tmp_path):
         return httpx.Response(200, json={"capabilities": {"modes": ["t2v", "fl2v", "ref2v"]}})
     client = VideoClient("http://test", transport=httpx.MockTransport(handle))
     with pytest.raises(ValueError, match="重启新版 API"):
-        client.submit({"mode": "edit", "prompt": "x", "source_video": {"file_id": "pending.mp4"}},
+        client.submit_edit({"prompt": "x", "source_video": {"file_id": "pending.mp4"}},
                       {"source_video": str(tmp_path / "not-uploaded.mp4")})
     assert requests == ["/v1/models"]
 
@@ -67,13 +71,14 @@ def test_edit_requires_source_and_validates_reference_limit_before_network():
     def unexpected(request):
         pytest.fail("invalid request contacted the API")
     demo = build_ui(VideoClient("http://test", transport=httpx.MockTransport(unexpected)))
-    submit = callback(demo, "submit")
-    args = ["x", "edit", 4, 352, 640, "1", 20, "res_multistep", "simple", 1,
-            None, None, None, None, None, None, True, "match"]
-    with pytest.raises(gr.Error, match="源视频"):
+    submit = callback(demo, "edit_submit")
+    args = ["x", None, [], 0, True, 10, "preserve_source", 352, 640, "1", 20,
+            "res_multistep", "simple", 1, None, "match"]
+    with pytest.raises(gr.Error):
         submit(*args)
+    args[1:3] = ["v.mp4", ["p.png"] * 10]
     with pytest.raises(gr.Error, match="9"):
-        submit(*args, edit_video="v.mp4", edit_images=["p.png"] * 10)
+        submit(*args)
 
 
 def test_mode_controls_and_segment_progress():
@@ -81,9 +86,13 @@ def test_mode_controls_and_segment_progress():
     client = VideoClient("http://test", transport=httpx.MockTransport(lambda _: httpx.Response(200, json={
         "status": "running", "progress": 0.7, "raw_status": {"current_segment": 2, "segment_count": 3}})))
     demo = build_ui(client)
-    updates = callback(demo, "change_mode")("edit", False, 4)
-    assert updates[2].visible is True and updates[3].value is True
-    assert updates[4].visible is False
+    tabs = [c for c in demo.config["components"] if c["type"] == "tabitem"]
+    assert len(tabs) >= 2
+    generation = next(e for e in demo.fns.values() if e.fn.__name__ == "submit")
+    editing = next(e for e in demo.fns.values() if e.fn.__name__ == "edit_submit")
+    assert set(c._id for c in generation.outputs).isdisjoint(c._id for c in editing.outputs)
+    updates = callback(demo, "change_mode")("ref2v")
+    assert updates[0].visible is False and updates[1].visible is True
     updates = callback(demo, "change_segmentation")(False, 60)
     assert updates[0].visible is False and updates[1].maximum == 15 and updates[1].value == 15
     message = callback(demo, "refresh")("task", "", [])[0]
@@ -100,5 +109,5 @@ def test_segmented_t2v_callback_keeps_edit_fields_out():
         return httpx.Response(202, json={"id": "long", "effective_duration_seconds": 60, "frame_count": 1440})
     demo = build_ui(VideoClient("http://test", transport=httpx.MockTransport(handle)))
     callback(demo, "submit")("x", "t2v", 60, 608, 352, "1", 20, "res_multistep", "simple", 1,
-        None, None, None, None, None, None, True, "match", edit_video="stale.mp4", segmented=True)
+        None, None, None, None, None, None, True, "match", segmented=True)
     assert payloads[0]["duration_seconds"] == 60 and "source_video" not in payloads[0]

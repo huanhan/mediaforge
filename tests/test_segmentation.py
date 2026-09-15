@@ -14,7 +14,7 @@ from minimaxh3_service.continuation import continue_latent
 from minimaxh3_service.local_backend import LocalGenerationBackend
 from minimaxh3_service.media import (SegmentedMP4Writer, load_audio_window, load_video,
                                      load_video_frames, save_mp4, video_duration)
-from minimaxh3_service.models import GenerationRequest
+from minimaxh3_service.models import VideoEditRequest, GenerationRequest
 from minimaxh3_service.native import NativeH3Runner, _video_latent_t
 from minimaxh3_service.workflow import SegmentProgress, build_plan
 
@@ -143,19 +143,21 @@ def test_source_interval_resolved_before_queueing(tmp_path, monkeypatch):
         backend = LocalGenerationBackend(settings, runner=SimpleNamespace(readiness=lambda: {"status": "ready"}))
         monkeypatch.setattr(backend.assets, "resolve_input", lambda _: tmp_path / "source.mp4")
         monkeypatch.setattr("minimaxh3_service.local_backend.video_duration", lambda _: 67)
-        request = GenerationRequest(prompt="change the actor", mode="edit", source_video={"file_id": "source.mp4", "start_seconds": 7},
+        monkeypatch.setattr("minimaxh3_service.local_backend.video_dimensions", lambda _: (720, 1280))
+        request = VideoEditRequest(prompt="change the actor", source_video={"file_id": "source.mp4", "start_seconds": 7},
                                     segmentation={"enabled": True})
-        result = await backend.submit(request)
+        result = await backend.submit_edit(request)
         plan = backend.tasks.records[result.id].payload
         assert result.frame_count == 60 * 24
         assert result.actual_overlap_frames == 39
         assert plan.request.source_video.duration_seconds == 60
+        assert (plan.request.width, plan.request.height) == (704, 1280)
         assert request.source_video.duration_seconds is None
         with pytest.raises(BackendError, match="exceeds"):
-            await backend.submit(GenerationRequest(prompt="x", mode="edit", source_video={
+            await backend.submit_edit(VideoEditRequest(prompt="x", source_video={
                 "file_id": "source.mp4", "start_seconds": 65, "duration_seconds": 4}))
         with pytest.raises(BackendError, match="segmentation"):
-            await backend.submit(GenerationRequest(prompt="x", mode="edit", source_video={"file_id": "source.mp4"}))
+            await backend.submit_edit(VideoEditRequest(prompt="x", source_video={"file_id": "source.mp4"}))
     asyncio.run(scenario())
 
 
@@ -188,9 +190,9 @@ def test_native_segment_loop_masks_trims_and_preserves_audio(tmp_path, monkeypat
     runner._video_vae = SimpleNamespace(decode=lambda _: torch.ones(runner._test_frame_count, 32, 32, 3) * len(masks) / 4)
     runner._audio_vae = SimpleNamespace(audio_sample_rate=32000,
         decode=lambda _: torch.zeros(1, round(runner._test_frame_count * 32000 / 24), 2))
-    kwargs = {"mode": "edit", "source_video": {"file_id": "source.mp4", "start_seconds": 1, "duration_seconds": 8},
-              "audio_mode": "preserve_source"} if edit else {}
-    plan = build_plan(GenerationRequest(prompt="x", duration_seconds=8, width=32, height=32,
+    kwargs = {"source_video": {"file_id": "source.mp4", "start_seconds": 1, "duration_seconds": 8},
+              "audio_mode": "preserve_source"} if edit else {"duration_seconds": 8}
+    plan = build_plan((VideoEditRequest if edit else GenerationRequest)(prompt="x", width=32, height=32,
         segmentation={"enabled": True, "segment_seconds": 4}, **kwargs))
     output = OutputArtifact("result.mp4", "", tmp_path / "result.mp4")
     progress = []
@@ -286,3 +288,29 @@ def test_http_segment_contract_progress_and_existing_endpoint(tmp_path):
             assert invalid.status_code == 422
         finally:
             release.set()
+
+
+@pytest.mark.parametrize("source, expected", [
+    ((352, 640), (352, 640)), ((720, 1280), (704, 1280)),
+    ((1920, 1080), (1344, 736)), ((1080, 1920), (736, 1344)),
+    ((16, 16), (32, 32)), ((100000, 1), (8192, 32)),
+])
+def test_automatic_edit_canvas(source, expected):
+    from minimaxh3_service.local_backend import source_canvas
+    assert source_canvas(*source) == expected
+
+
+@pytest.mark.parametrize("dimensions", [{"width": 352}, {"height": 640},
+    {"width": 350, "height": 640}, {"width": 1920, "height": 1088}])
+def test_edit_rejects_incomplete_or_invalid_custom_canvas(dimensions):
+    with pytest.raises(ValueError):
+        VideoEditRequest(prompt="x", source_video={"file_id": "v.mp4"}, **dimensions)
+
+
+def test_edit_canvas_defaults_and_custom_size():
+    request = VideoEditRequest(prompt="x", source_video={"file_id": "v.mp4"})
+    assert request.width is None and request.height is None
+    custom = VideoEditRequest(prompt="x", source_video={"file_id": "v.mp4"}, width=352, height=640)
+    assert (custom.width, custom.height) == (352, 640)
+    generation = GenerationRequest(prompt="x")
+    assert (generation.width, generation.height) == (1344, 768)

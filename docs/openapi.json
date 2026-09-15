@@ -3,7 +3,7 @@
   "info": {
     "title": "MiniMax H3 Local API",
     "summary": "Local video generation and image/video upscaling on one GPU queue.",
-    "description": "Generate audio-video clips with MiniMax H3 and upscale uploaded images or whole videos with SeedVR2. Generation and upscale tasks share one GPU queue.\n\n## Typical workflow\n1. Upload required source media with `POST /v1/files`.\n2. Submit `POST /v1/generations` or `POST /v1/upscales`.\n3. Poll `GET /v1/tasks/{task_id}` or consume its SSE event stream.\n4. Download successful outputs from `outputs[].download_url`.\n\nAuthentication is only enforced when `H3_API_KEY` is configured. Supply it through `X-API-Key` or `Authorization: Bearer <key>`.",
+    "description": "Generate audio-video clips with MiniMax H3 and upscale uploaded images or whole videos with SeedVR2. Generation and upscale tasks share one GPU queue.\n\n## Typical workflow\n1. Upload required source media with `POST /v1/files`.\n2. Submit `POST /v1/generations`, `POST /v1/edits` or `POST /v1/upscales`.\n3. Poll `GET /v1/tasks/{task_id}` or consume its SSE event stream.\n4. Download successful outputs from `outputs[].download_url`.\n\nAuthentication is only enforced when `H3_API_KEY` is configured. Supply it through `X-API-Key` or `Authorization: Bearer <key>`.",
     "version": "0.1.0"
   },
   "paths": {
@@ -186,14 +186,43 @@
         "tags": [
           "generation"
         ],
-        "summary": "Submit a video generation task",
-        "description": "Queues a t2v, fl2v, ref2v, or edit request on the shared GPU worker. Enable segmentation for overlapping latent continuation and one merged output. Uploaded media must be referenced by file_id.",
+        "summary": "视频生成 / 重叠分段",
+        "description": "仅接受 t2v、fl2v、ref2v。可启用 segmentation 自动重叠分段。视频编辑请使用独立 POST /v1/edits；此接口不再接受 mode=edit 或编辑专用字段。",
         "operationId": "create_generation",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/GenerationRequest"
+              },
+              "examples": {
+                "t2v": {
+                  "summary": "文生视频（默认）",
+                  "value": {
+                    "mode": "t2v",
+                    "prompt": "雨夜街道，镜头缓慢向前。Audio: rain.",
+                    "duration_seconds": 4,
+                    "width": 608,
+                    "height": 352,
+                    "seed": 42
+                  }
+                },
+                "segmented_t2v": {
+                  "summary": "文生长视频：自动重叠分段",
+                  "value": {
+                    "mode": "t2v",
+                    "prompt": "镜头持续缓慢穿过雨夜街道。Audio: steady rain.",
+                    "duration_seconds": 30,
+                    "width": 608,
+                    "height": 352,
+                    "seed": 42,
+                    "segmentation": {
+                      "enabled": true,
+                      "segment_seconds": 10,
+                      "overlap_frames": 48
+                    }
+                  }
+                }
               }
             }
           },
@@ -202,6 +231,132 @@
         "responses": {
           "202": {
             "description": "Queued generation task metadata.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmittedTask"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/edits": {
+      "post": {
+        "tags": [
+          "editing"
+        ],
+        "summary": "视频编辑 / 角色迁移 / 换背景",
+        "description": "上传源视频及可选参考图后提交。source_video 必填，不传 mode；编辑区间只填写 source_video.start_seconds / duration_seconds。与视频生成共用任务查询、取消和下载接口，支持重叠分段。",
+        "operationId": "create_edit",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VideoEditRequest"
+              },
+              "examples": {
+                "edit_character": {
+                  "summary": "视频编辑：角色替换 / 动作迁移",
+                  "description": "上传源视频和角色图。未填写时长表示处理全部源视频；需要 Ref2V 权重。",
+                  "value": {
+                    "prompt": "用 <Picture 1> 中的角色替换 <Video 1> 的主要人物，继承原动作、节奏和道具，保留原背景与镜头。",
+                    "source_video": {
+                      "file_id": "uploads/source.mp4"
+                    },
+                    "reference_images": [
+                      "uploads/character.png"
+                    ],
+                    "width": 352,
+                    "height": 640,
+                    "audio_mode": "preserve_source",
+                    "seed": 358,
+                    "segmentation": {
+                      "enabled": true,
+                      "segment_seconds": 10,
+                      "overlap_frames": 48
+                    }
+                  }
+                },
+                "edit_background": {
+                  "summary": "视频编辑：上传背景图换背景",
+                  "description": "reference_images 在此作为背景参考；每张图的作用由提示词指定。",
+                  "value": {
+                    "prompt": "<Picture 1> 仅用作目标背景。从第一帧到最后一帧，将 <Video 1> 的背景替换为图片中的场景，保留背景构图与色彩。保留原角色、动作、道具和镜头。不要渐变或延迟切换。",
+                    "source_video": {
+                      "file_id": "uploads/source.mp4"
+                    },
+                    "reference_images": [
+                      "uploads/background.png"
+                    ],
+                    "width": 352,
+                    "height": 640,
+                    "audio_mode": "preserve_source",
+                    "seed": 358,
+                    "segmentation": {
+                      "enabled": true,
+                      "segment_seconds": 10,
+                      "overlap_frames": 48
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
@@ -769,8 +924,7 @@
         "enum": [
           "t2v",
           "fl2v",
-          "ref2v",
-          "edit"
+          "ref2v"
         ],
         "title": "GenerationMode"
       },
@@ -782,19 +936,6 @@
             "minLength": 1,
             "title": "Prompt",
             "description": "Visual and audio generation prompt."
-          },
-          "mode": {
-            "$ref": "#/components/schemas/GenerationMode",
-            "description": "t2v accepts no media, fl2v requires first_frame and/or last_frame, ref2v requires uploaded reference images or videos; edit requires source_video.",
-            "default": "t2v"
-          },
-          "duration_seconds": {
-            "type": "number",
-            "maximum": 600.0,
-            "minimum": 4.0,
-            "title": "Duration Seconds",
-            "description": "Requested duration; above 15 seconds requires segmentation. For edit, omission uses the source interval. Effective duration is returned.",
-            "default": 5.0
           },
           "width": {
             "type": "integer",
@@ -861,55 +1002,8 @@
             "description": "Denoising strength.",
             "default": 1.0
           },
-          "source_video": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/SourceVideo"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "segmentation": {
             "$ref": "#/components/schemas/SegmentationOptions"
-          },
-          "audio_mode": {
-            "type": "string",
-            "enum": [
-              "generate",
-              "preserve_source"
-            ],
-            "title": "Audio Mode",
-            "default": "generate"
-          },
-          "first_frame": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 512,
-                "minLength": 1
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "First Frame",
-            "description": "Uploaded image file_id used as the first frame in fl2v mode."
-          },
-          "last_frame": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 512,
-                "minLength": 1
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Frame",
-            "description": "Uploaded image file_id used as the last frame in fl2v mode."
           },
           "reference_images": {
             "items": {
@@ -920,27 +1014,7 @@
             "type": "array",
             "maxItems": 9,
             "title": "Reference Images",
-            "description": "Uploaded reference image file_ids for ref2v mode."
-          },
-          "reference_videos": {
-            "items": {
-              "$ref": "#/components/schemas/ReferenceVideo"
-            },
-            "type": "array",
-            "maxItems": 3,
-            "title": "Reference Videos",
-            "description": "Uploaded reference videos for ref2v mode."
-          },
-          "reference_audios": {
-            "items": {
-              "type": "string",
-              "maxLength": 512,
-              "minLength": 1
-            },
-            "type": "array",
-            "maxItems": 3,
-            "title": "Reference Audios",
-            "description": "Uploaded standalone audio file_ids for ref2v mode."
+            "description": "Uploaded reference image file_ids, in prompt numbering order."
           },
           "ref_image_size": {
             "type": "string",
@@ -964,24 +1038,71 @@
             ],
             "title": "Filename Prefix",
             "description": "Optional safe output path prefix relative to the output directory."
+          },
+          "mode": {
+            "$ref": "#/components/schemas/GenerationMode",
+            "description": "t2v: text; fl2v: first/last frames; ref2v: reference media. Video editing uses POST /v1/edits.",
+            "default": "t2v"
+          },
+          "duration_seconds": {
+            "type": "number",
+            "maximum": 600.0,
+            "minimum": 4.0,
+            "title": "Duration Seconds",
+            "description": "Requested duration; above 15 seconds requires segmentation.",
+            "default": 5
+          },
+          "first_frame": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Frame"
+          },
+          "last_frame": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Frame"
+          },
+          "reference_videos": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceVideo"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Reference Videos"
+          },
+          "reference_audios": {
+            "items": {
+              "type": "string",
+              "maxLength": 512,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Reference Audios"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "prompt"
         ],
-        "title": "GenerationRequest",
-        "examples": [
-          {
-            "duration_seconds": 4,
-            "height": 352,
-            "mode": "t2v",
-            "prompt": "A red paper airplane glides over a white tabletop.",
-            "seed": 42,
-            "steps": 8,
-            "width": 608
-          }
-        ]
+        "title": "GenerationRequest"
       },
       "HTTPValidationError": {
         "properties": {
@@ -1602,6 +1723,151 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VideoEditRequest": {
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Prompt",
+            "description": "Visual and audio generation prompt."
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 8192.0,
+                "minimum": 32.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width",
+            "description": "Output width. Omit both dimensions (or set both to null) to use the source size, aligned to 32 and scaled down to the canvas limit."
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 8192.0,
+                "minimum": 32.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height",
+            "description": "Output height. Supply together with width, or omit both for automatic source dimensions."
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 9.223372036854776e+18,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed",
+            "description": "Optional deterministic seed. A random seed is used when omitted."
+          },
+          "steps": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Steps",
+            "description": "Sampling step count.",
+            "default": 20
+          },
+          "sampler_name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Sampler Name",
+            "description": "Comfy sampling algorithm name.",
+            "default": "res_multistep"
+          },
+          "scheduler": {
+            "type": "string",
+            "enum": [
+              "simple",
+              "beta",
+              "normal"
+            ],
+            "title": "Scheduler",
+            "description": "Noise schedule.",
+            "default": "simple"
+          },
+          "denoise": {
+            "type": "number",
+            "maximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Denoise",
+            "description": "Denoising strength.",
+            "default": 1.0
+          },
+          "segmentation": {
+            "$ref": "#/components/schemas/SegmentationOptions"
+          },
+          "reference_images": {
+            "items": {
+              "type": "string",
+              "maxLength": 512,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 9,
+            "title": "Reference Images",
+            "description": "Uploaded reference image file_ids, in prompt numbering order."
+          },
+          "ref_image_size": {
+            "type": "string",
+            "enum": [
+              "match",
+              "max"
+            ],
+            "title": "Ref Image Size",
+            "description": "Resize reference images to the output canvas or their maximum supported size.",
+            "default": "match"
+          },
+          "filename_prefix": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 240
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename Prefix",
+            "description": "Optional safe output path prefix relative to the output directory."
+          },
+          "source_video": {
+            "$ref": "#/components/schemas/SourceVideo",
+            "description": "Required source video and optional interval. Omitted interval duration uses the remainder of the source video."
+          },
+          "audio_mode": {
+            "type": "string",
+            "enum": [
+              "generate",
+              "preserve_source"
+            ],
+            "title": "Audio Mode",
+            "default": "preserve_source"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "prompt",
+          "source_video"
+        ],
+        "title": "VideoEditRequest"
       }
     },
     "securitySchemes": {

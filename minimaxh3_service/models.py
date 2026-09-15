@@ -25,7 +25,6 @@ class GenerationMode(StrEnum):
     T2V = "t2v"
     FL2V = "fl2v"
     REF2V = "ref2v"
-    EDIT = "edit"
 
 
 class SourceVideo(BaseModel):
@@ -74,40 +73,14 @@ class ReferenceVideo(BaseModel):
         return validate_file_id(value) if value is not None else None
 
 
-class GenerationRequest(BaseModel):
-    model_config = ConfigDict(
-        json_schema_extra={
-            "examples": [
-                {
-                    "prompt": "A red paper airplane glides over a white tabletop.",
-                    "mode": "t2v",
-                    "duration_seconds": 4,
-                    "width": 608,
-                    "height": 352,
-                    "seed": 42,
-                    "steps": 8,
-                }
-            ]
-        }
-    )
+class VideoRequestOptions(BaseModel):
+    """Sampling and output options shared by the two independent HTTP requests."""
+    model_config = ConfigDict(extra="forbid")
 
     prompt: str = Field(
         min_length=1,
         max_length=100_000,
         description="Visual and audio generation prompt.",
-    )
-    mode: GenerationMode = Field(
-        default=GenerationMode.T2V,
-        description=(
-            "t2v accepts no media, fl2v requires first_frame and/or last_frame, "
-            "ref2v requires uploaded reference images or videos; edit requires source_video."
-        ),
-    )
-    duration_seconds: float = Field(
-        default=5.0,
-        ge=4.0,
-        le=600.0,
-        description="Requested duration; above 15 seconds requires segmentation. For edit, omission uses the source interval. Effective duration is returned.",
     )
     width: int = Field(
         default=1344,
@@ -144,31 +117,11 @@ class GenerationRequest(BaseModel):
         le=1.0,
         description="Denoising strength.",
     )
-    source_video: SourceVideo | None = None
     segmentation: SegmentationOptions = Field(default_factory=SegmentationOptions)
-    audio_mode: Literal["generate", "preserve_source"] = "generate"
-    first_frame: FileId | None = Field(
-        default=None,
-        description="Uploaded image file_id used as the first frame in fl2v mode.",
-    )
-    last_frame: FileId | None = Field(
-        default=None,
-        description="Uploaded image file_id used as the last frame in fl2v mode.",
-    )
     reference_images: list[FileId] = Field(
         default_factory=list,
         max_length=9,
-        description="Uploaded reference image file_ids for ref2v mode.",
-    )
-    reference_videos: list[ReferenceVideo] = Field(
-        default_factory=list,
-        max_length=3,
-        description="Uploaded reference videos for ref2v mode.",
-    )
-    reference_audios: list[FileId] = Field(
-        default_factory=list,
-        max_length=3,
-        description="Uploaded standalone audio file_ids for ref2v mode.",
+        description="Uploaded reference image file_ids, in prompt numbering order.",
     )
     ref_image_size: Literal["match", "max"] = Field(
         default="match",
@@ -187,12 +140,7 @@ class GenerationRequest(BaseModel):
             raise ValueError("prompt must not be blank")
         return value
 
-    @field_validator("first_frame", "last_frame")
-    @classmethod
-    def optional_file_ids_are_safe(cls, value: str | None) -> str | None:
-        return validate_file_id(value) if value is not None else None
-
-    @field_validator("reference_images", "reference_audios")
+    @field_validator("reference_images")
     @classmethod
     def file_id_lists_are_safe(cls, value: list[str]) -> list[str]:
         return [validate_file_id(item) for item in value]
@@ -208,28 +156,49 @@ class GenerationRequest(BaseModel):
         return normalized
 
     @model_validator(mode="after")
-    def validate_mode_and_canvas(self) -> "GenerationRequest":
-        if self.duration_seconds > 15 and not self.segmentation.enabled:
-            raise ValueError("duration_seconds above 15 requires segmentation.enabled=true")
-        if self.source_video is not None and self.mode != GenerationMode.EDIT:
-            raise ValueError("source_video is only accepted in edit mode")
-        if self.audio_mode == "preserve_source" and self.mode != GenerationMode.EDIT:
-            raise ValueError("preserve_source audio requires edit mode")
-        if self.mode == GenerationMode.EDIT:
-            if self.source_video is None:
-                raise ValueError("edit requires source_video")
-            if self.first_frame or self.last_frame or self.reference_videos or self.reference_audios:
-                raise ValueError("edit accepts source_video and reference_images only")
-            source_duration = self.source_video.duration_seconds
-            if source_duration is not None:
-                if "duration_seconds" in self.model_fields_set and abs(self.duration_seconds - source_duration) > 1e-6:
-                    raise ValueError("duration_seconds conflicts with source_video.duration_seconds")
-                if source_duration > 15 and not self.segmentation.enabled:
-                    raise ValueError("source duration above 15 requires segmentation.enabled=true")
+    def validate_canvas(self) -> "VideoRequestOptions":
+        if self.width is None or self.height is None:
+            return self
         if self.width % 32 or self.height % 32:
             raise ValueError("width and height must be multiples of 32")
         if self.width * self.height > MAX_CANVAS_PIXELS:
             raise ValueError(f"canvas must not exceed {MAX_CANVAS_PIXELS} pixels")
+        return self
+
+
+class GenerationRequest(VideoRequestOptions):
+    mode: GenerationMode = Field(default=GenerationMode.T2V,
+        description="t2v: text; fl2v: first/last frames; ref2v: reference media. Video editing uses POST /v1/edits.")
+    duration_seconds: float = Field(default=5, ge=4, le=600,
+        description="Requested duration; above 15 seconds requires segmentation.")
+    first_frame: FileId | None = None
+    last_frame: FileId | None = None
+    reference_videos: list[ReferenceVideo] = Field(default_factory=list, max_length=3)
+    reference_audios: list[FileId] = Field(default_factory=list, max_length=3)
+
+    @field_validator("first_frame", "last_frame")
+    @classmethod
+    def optional_file_ids_are_safe(cls, value: str | None) -> str | None:
+        return validate_file_id(value) if value is not None else None
+
+    @field_validator("reference_audios")
+    @classmethod
+    def audio_ids_are_safe(cls, value: list[str]) -> list[str]:
+        return [validate_file_id(item) for item in value]
+
+    # Internal runner compatibility; these are not request fields and cannot be submitted.
+    @property
+    def source_video(self) -> None:
+        return None
+
+    @property
+    def audio_mode(self) -> str:
+        return "generate"
+
+    @model_validator(mode="after")
+    def validate_mode(self) -> "GenerationRequest":
+        if self.duration_seconds > 15 and not self.segmentation.enabled:
+            raise ValueError("duration_seconds above 15 requires segmentation.enabled=true")
 
         has_frames = self.first_frame is not None or self.last_frame is not None
         has_references = bool(self.reference_images or self.reference_videos or self.reference_audios)
@@ -257,6 +226,51 @@ class GenerationRequest(BaseModel):
             if audio_count > 3:
                 raise ValueError("ref2v accepts at most 3 audio references in total")
         return self
+
+
+class VideoEditRequest(VideoRequestOptions):
+    width: int | None = Field(default=None, ge=32, le=8192,
+        description="Output width. Omit both dimensions (or set both to null) to use the source size, aligned to 32 and scaled down to the canvas limit.")
+    height: int | None = Field(default=None, ge=32, le=8192,
+        description="Output height. Supply together with width, or omit both for automatic source dimensions.")
+    source_video: SourceVideo = Field(description="Required source video and optional interval. Omitted interval duration uses the remainder of the source video.")
+    audio_mode: Literal["generate", "preserve_source"] = "preserve_source"
+
+    @model_validator(mode="after")
+    def validate_interval(self) -> "VideoEditRequest":
+        if (self.width is None) != (self.height is None):
+            raise ValueError("width and height must be supplied together or both omitted")
+        duration = self.source_video.duration_seconds
+        if duration is not None and duration > 15 and not self.segmentation.enabled:
+            raise ValueError("source duration above 15 requires segmentation.enabled=true")
+        return self
+
+    @property
+    def mode(self) -> GenerationMode:
+        """Editing runs through Ref2V internally; no mode field exists on the wire."""
+        return GenerationMode.REF2V
+
+    @property
+    def duration_seconds(self) -> float:
+        if self.source_video.duration_seconds is None:
+            raise ValueError("source duration must be resolved before planning")
+        return self.source_video.duration_seconds
+
+    @property
+    def first_frame(self) -> None:
+        return None
+
+    @property
+    def last_frame(self) -> None:
+        return None
+
+    @property
+    def reference_videos(self) -> list[ReferenceVideo]:
+        return []
+
+    @property
+    def reference_audios(self) -> list[str]:
+        return []
 
 
 class UpscaleRequest(BaseModel):

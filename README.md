@@ -9,7 +9,7 @@
 - `t2v`：文本生成带 32 kHz 立体声音频的视频
 - `fl2v`：首帧、尾帧或首尾帧生成视频
 - `ref2v`：参考图片、视频和音频生成视频，需要额外 Ref2V 权重
-- `edit`：按源视频时间线进行参考条件驱动的编辑，可保留原音轨，需要 Ref2V 权重
+- `POST /v1/edits`（独立视频编辑接口）：按源视频时间线进行参考条件驱动的编辑，可保留原音轨，需要 Ref2V 权重
 - 重叠分段：生成接口设置 `segmentation.enabled=true`，支持最长 600 秒、latent 连续性引导和自动拼接
 - `upscale`：把已上传图片或视频超分到指定宽高，使用 SeedVR2 3B FP8；视频保留原帧率和可用音频
 - 本地素材上传、单 GPU 任务队列、SSE 状态、取消以及 MP4/PNG 下载
@@ -309,3 +309,5 @@ uv run python examples/matrix_test.py `
 $env:H3_MLP_CHUNK_ROWS="0"
 .venv/Scripts/python.exe main.py
 ```
+
+Gradio `/ui/` 通过“视频生成”和“视频编辑”独立 Tab 区分功能。旧 `/v1/generations` 不再支持 `mode=edit`；编辑请求不带 `mode`，详见 [对接文档](docs/INTEGRATION.md)。
