@@ -45,6 +45,7 @@ def add_edit_ui(client, refresh, cancel):
             raise gr.Error(str(exc)) from exc
 
     gr.Markdown("上传源视频进行动作迁移、换背景或风格编辑。参考图片可用于指定角色或背景；编辑结果由模型重新生成。")
+    gr.Markdown("透明视频和参考图片会先合成到白色背景再参与编辑；生成的 MP4 不保留透明通道。如需透明结果，请在生成后进行主体分离。")
     with gr.Row():
         with gr.Column(scale=3):
             source = gr.File(label="源视频（必填）", file_types=["video"])

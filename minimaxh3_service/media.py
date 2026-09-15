@@ -18,7 +18,9 @@ def load_image(path: Path) -> Any:
     from PIL import Image, ImageOps
 
     with Image.open(path) as image:
-        rgb = ImageOps.exif_transpose(image).convert("RGB")
+        oriented = ImageOps.exif_transpose(image)
+        rgba = oriented.convert("RGBA")
+        rgb = Image.alpha_composite(Image.new("RGBA", rgba.size, "white"), rgba).convert("RGB")
         array = np.asarray(rgb, dtype=np.float32) / 255.0
     return torch.from_numpy(array.copy()).unsqueeze(0)
 
@@ -31,6 +33,19 @@ def video_dimensions(path: Path) -> tuple[int, int]:
             raise ValueError(f"video has no video stream: {path.name}")
         stream = container.streams.video[0]
         return int(stream.codec_context.width), int(stream.codec_context.height)
+
+
+def _video_frame_rgb(frame: Any, *, width: int | None = None, height: int | None = None) -> Any:
+    """Flatten alpha before resizing so hidden source colors cannot reach the model."""
+    if any(component.is_alpha for component in frame.format.components):
+        import av
+        import numpy as np
+        from PIL import Image
+
+        rgba = Image.fromarray(frame.to_ndarray(format="rgba"))
+        rgb = Image.alpha_composite(Image.new("RGBA", rgba.size, "white"), rgba).convert("RGB")
+        frame = av.VideoFrame.from_ndarray(np.asarray(rgb), format="rgb24")
+    return frame.reformat(width=width, height=height, format="rgb24").to_ndarray()
 
 
 def load_video(path: Path) -> tuple[Any, Fraction]:
@@ -46,7 +61,7 @@ def load_video(path: Path) -> tuple[Any, Fraction]:
         rate = stream.average_rate or stream.base_rate or Fraction(24, 1)
         fps = Fraction(rate)
         for frame in container.decode(stream):
-            frames.append(frame.to_ndarray(format="rgb24"))
+            frames.append(_video_frame_rgb(frame))
     if not frames:
         raise ValueError(f"video contains no decodable frames: {path.name}")
     array = np.stack(frames).astype(np.float32) / 255.0
@@ -83,8 +98,7 @@ def load_video_frames(
                 check_canceled()
             timestamp = float(frame.time) - origin if frame.time is not None else decoded_index * frame_interval
             while timestamp + frame_interval / 2 >= next_timestamp and len(selected) < max_frames:
-                resized = frame.reformat(width=width, height=height, format="rgb24")
-                selected.append(resized.to_ndarray())
+                selected.append(_video_frame_rgb(frame, width=width, height=height))
                 next_timestamp += 1.0 / fps
             if len(selected) >= max_frames:
                 break
