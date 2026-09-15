@@ -9,6 +9,8 @@
 - `t2v`：文本生成带 32 kHz 立体声音频的视频
 - `fl2v`：首帧、尾帧或首尾帧生成视频
 - `ref2v`：参考图片、视频和音频生成视频，需要额外 Ref2V 权重
+- `edit`：按源视频时间线进行参考条件驱动的编辑，可保留原音轨，需要 Ref2V 权重
+- 重叠分段：生成接口设置 `segmentation.enabled=true`，支持最长 600 秒、latent 连续性引导和自动拼接
 - `upscale`：把已上传图片或视频超分到指定宽高，使用 SeedVR2 3B FP8；视频保留原帧率和可用音频
 - 本地素材上传、单 GPU 任务队列、SSE 状态、取消以及 MP4/PNG 下载
 
@@ -205,6 +207,8 @@ Invoke-RestMethod `
 接口返回 HTTP `202`，包含任务 `id`、共享队列位置和目标宽高。后续继续使用 `GET /v1/tasks/{id}` 或 `/events` 查询；图片结果为 PNG，视频结果为 MP4。查询响应的 `kind` 为 `generation` 或 `upscale`。
 
 ## 首尾帧和参考素材
+
+视频编辑和长视频重叠分段的接口、对齐规则及限制见 [分段生成说明](docs/SEGMENTED_GENERATION.md)。
 
 先上传素材：
 

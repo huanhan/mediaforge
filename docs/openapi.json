@@ -187,7 +187,7 @@
           "generation"
         ],
         "summary": "Submit a video generation task",
-        "description": "Queues a t2v, fl2v, or ref2v request on the shared GPU worker. Uploaded media must be referenced by file_id.",
+        "description": "Queues a t2v, fl2v, ref2v, or edit request on the shared GPU worker. Enable segmentation for overlapping latent continuation and one merged output. Uploaded media must be referenced by file_id.",
         "operationId": "create_generation",
         "requestBody": {
           "content": {
@@ -769,7 +769,8 @@
         "enum": [
           "t2v",
           "fl2v",
-          "ref2v"
+          "ref2v",
+          "edit"
         ],
         "title": "GenerationMode"
       },
@@ -784,15 +785,15 @@
           },
           "mode": {
             "$ref": "#/components/schemas/GenerationMode",
-            "description": "t2v accepts no media, fl2v requires first_frame and/or last_frame, and ref2v requires uploaded reference images or videos.",
+            "description": "t2v accepts no media, fl2v requires first_frame and/or last_frame, ref2v requires uploaded reference images or videos; edit requires source_video.",
             "default": "t2v"
           },
           "duration_seconds": {
             "type": "number",
-            "maximum": 15.0,
+            "maximum": 600.0,
             "minimum": 4.0,
             "title": "Duration Seconds",
-            "description": "Requested duration. The effective frame-aligned duration is returned.",
+            "description": "Requested duration; above 15 seconds requires segmentation. For edit, omission uses the source interval. Effective duration is returned.",
             "default": 5.0
           },
           "width": {
@@ -859,6 +860,28 @@
             "title": "Denoise",
             "description": "Denoising strength.",
             "default": 1.0
+          },
+          "source_video": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceVideo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "segmentation": {
+            "$ref": "#/components/schemas/SegmentationOptions"
+          },
+          "audio_mode": {
+            "type": "string",
+            "enum": [
+              "generate",
+              "preserve_source"
+            ],
+            "title": "Audio Mode",
+            "default": "generate"
           },
           "first_frame": {
             "anyOf": [
@@ -1168,8 +1191,80 @@
         ],
         "title": "ReferenceVideo"
       },
+      "SegmentationOptions": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": false
+          },
+          "segment_seconds": {
+            "type": "number",
+            "maximum": 15.0,
+            "minimum": 4.0,
+            "title": "Segment Seconds",
+            "default": 10
+          },
+          "overlap_frames": {
+            "type": "integer",
+            "maximum": 345.0,
+            "minimum": 5.0,
+            "title": "Overlap Frames",
+            "description": "Requested overlap at 24 FPS; rounded down to the H3 17k+5 grid.",
+            "default": 48
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SegmentationOptions"
+      },
+      "SourceVideo": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "File Id"
+          },
+          "start_seconds": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Start Seconds",
+            "default": 0
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 600.0,
+                "minimum": 4.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "file_id"
+        ],
+        "title": "SourceVideo"
+      },
       "SubmittedTask": {
         "properties": {
+          "segment_count": {
+            "type": "integer",
+            "title": "Segment Count",
+            "default": 1
+          },
+          "actual_overlap_frames": {
+            "type": "integer",
+            "title": "Actual Overlap Frames",
+            "default": 0
+          },
           "id": {
             "type": "string",
             "title": "Id",

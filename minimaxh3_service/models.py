@@ -25,6 +25,36 @@ class GenerationMode(StrEnum):
     T2V = "t2v"
     FL2V = "fl2v"
     REF2V = "ref2v"
+    EDIT = "edit"
+
+
+class SourceVideo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    file_id: FileId
+    start_seconds: float = Field(default=0, ge=0, allow_inf_nan=False)
+    duration_seconds: float | None = Field(default=None, ge=4, le=600)
+
+    @field_validator("file_id")
+    @classmethod
+    def safe_file_id(cls, value: str) -> str:
+        return validate_file_id(value)
+
+
+class SegmentationOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    segment_seconds: float = Field(default=10, ge=4, le=15)
+    overlap_frames: int = Field(default=48, ge=5, le=345,
+        description="Requested overlap at 24 FPS; rounded down to the H3 17k+5 grid.")
+
+    @model_validator(mode="after")
+    def overlap_fits(self) -> "SegmentationOptions":
+        frames = round(self.segment_seconds * 24)
+        frames += (5 - frames % 17) % 17
+        overlap = self.overlap_frames - (self.overlap_frames - 5) % 17
+        if overlap >= frames:
+            raise ValueError("overlap must be shorter than a segment")
+        return self
 
 
 class ReferenceVideo(BaseModel):
@@ -70,14 +100,14 @@ class GenerationRequest(BaseModel):
         default=GenerationMode.T2V,
         description=(
             "t2v accepts no media, fl2v requires first_frame and/or last_frame, "
-            "and ref2v requires uploaded reference images or videos."
+            "ref2v requires uploaded reference images or videos; edit requires source_video."
         ),
     )
     duration_seconds: float = Field(
         default=5.0,
         ge=4.0,
-        le=15.0,
-        description="Requested duration. The effective frame-aligned duration is returned.",
+        le=600.0,
+        description="Requested duration; above 15 seconds requires segmentation. For edit, omission uses the source interval. Effective duration is returned.",
     )
     width: int = Field(
         default=1344,
@@ -114,6 +144,9 @@ class GenerationRequest(BaseModel):
         le=1.0,
         description="Denoising strength.",
     )
+    source_video: SourceVideo | None = None
+    segmentation: SegmentationOptions = Field(default_factory=SegmentationOptions)
+    audio_mode: Literal["generate", "preserve_source"] = "generate"
     first_frame: FileId | None = Field(
         default=None,
         description="Uploaded image file_id used as the first frame in fl2v mode.",
@@ -176,6 +209,23 @@ class GenerationRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_mode_and_canvas(self) -> "GenerationRequest":
+        if self.duration_seconds > 15 and not self.segmentation.enabled:
+            raise ValueError("duration_seconds above 15 requires segmentation.enabled=true")
+        if self.source_video is not None and self.mode != GenerationMode.EDIT:
+            raise ValueError("source_video is only accepted in edit mode")
+        if self.audio_mode == "preserve_source" and self.mode != GenerationMode.EDIT:
+            raise ValueError("preserve_source audio requires edit mode")
+        if self.mode == GenerationMode.EDIT:
+            if self.source_video is None:
+                raise ValueError("edit requires source_video")
+            if self.first_frame or self.last_frame or self.reference_videos or self.reference_audios:
+                raise ValueError("edit accepts source_video and reference_images only")
+            source_duration = self.source_video.duration_seconds
+            if source_duration is not None:
+                if "duration_seconds" in self.model_fields_set and abs(self.duration_seconds - source_duration) > 1e-6:
+                    raise ValueError("duration_seconds conflicts with source_video.duration_seconds")
+                if source_duration > 15 and not self.segmentation.enabled:
+                    raise ValueError("source duration above 15 requires segmentation.enabled=true")
         if self.width % 32 or self.height % 32:
             raise ValueError("width and height must be multiples of 32")
         if self.width * self.height > MAX_CANVAS_PIXELS:
@@ -258,6 +308,8 @@ class UpscaleRequest(BaseModel):
 
 
 class SubmittedTask(BaseModel):
+    segment_count: int = 1
+    actual_overlap_frames: int = 0
     id: str = Field(description="Task identifier used by all task endpoints.")
     status: Literal["queued"] = "queued"
     queue_number: int | float | None = Field(

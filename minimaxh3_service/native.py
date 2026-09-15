@@ -14,18 +14,21 @@ from typing import Any, Callable
 
 from .backend import OutputArtifact
 from .config import Settings
+from .continuation import continue_latent
 from .memory import GenerationMemoryError, h3_memory_scope
 from .media import (
     load_audio,
+    load_audio_window,
     load_image,
     load_video_frames,
     save_mp4,
     validate_mp4_encoders,
     video_dimensions,
+    SegmentedMP4Writer,
 )
 from .models import GenerationMode, ReferenceVideo
 from .tasks import GenerationCanceled
-from .workflow import GenerationPlan
+from .workflow import GenerationPlan, SegmentProgress
 
 
 COMFY_CORE_COMMIT = "dd79c643a95402136a75a28f6187d843bcf457ed"
@@ -45,6 +48,7 @@ ACCELERATION_STEPS = {
     GenerationMode.T2V: 8,
     GenerationMode.FL2V: 8,
     GenerationMode.REF2V: 4,
+    GenerationMode.EDIT: 4,
 }
 ACCELERATION_SAMPLER = "euler"
 ACCELERATION_SCHEDULER = "simple"
@@ -192,6 +196,9 @@ class NativeH3Runner:
         return {
             "status": "ready" if ready else "not_ready",
             "backend": "native",
+            "capabilities": {"edit": not any(key in missing_optional_models for key in
+                                                ("ref2va", "ref2va_acceleration_lora")),
+                             "segmentation": True, "continuation": "fixed_latent_prefix"},
             "runtime": str(runtime),
             "runtime_commit": COMFY_CORE_COMMIT,
             "model_root": str(self.settings.model_root.expanduser().resolve()),
@@ -304,7 +311,7 @@ class NativeH3Runner:
 
     def _load_diffusion_model(self, mode: GenerationMode) -> Any:
         core = self._import_core()
-        wanted = GenerationMode.REF2V if mode == GenerationMode.REF2V else GenerationMode.FL2V
+        wanted = GenerationMode.REF2V if mode in {GenerationMode.REF2V, GenerationMode.EDIT} else GenerationMode.FL2V
         if self._model is not None and self._model_mode == wanted:
             return self._model
         if self._model is not None:
@@ -412,6 +419,11 @@ class NativeH3Runner:
         self,
         plan: GenerationPlan,
         reference: ReferenceVideo,
+        *,
+        start_seconds: float = 0,
+        duration_seconds: float | None = None,
+        source: bool = False,
+        check_canceled: Callable[[], None] | None = None,
     ) -> tuple[Any, dict[str, Any] | None]:
         path = self.resolve_input(reference.file_id)
         source_width, source_height = video_dimensions(path)
@@ -419,26 +431,41 @@ class NativeH3Runner:
         if source_width * source_height < width * height:
             width = max(CANVAS_MULTIPLE, round(source_width / CANVAS_MULTIPLE) * CANVAS_MULTIPLE)
             height = max(CANVAS_MULTIPLE, round(source_height / CANVAS_MULTIPLE) * CANVAS_MULTIPLE)
+        if source:
+            width, height = plan.request.width, plan.request.height
+        max_frames = plan.frame_count
+        if duration_seconds is not None:
+            max_frames = min(max_frames, max(1, round(duration_seconds * FPS)))
         frames = load_video_frames(
             path,
             width=width,
             height=height,
-            max_frames=plan.frame_count,
+            max_frames=max_frames,
             fps=FPS,
+            start_seconds=start_seconds,
+            check_canceled=check_canceled,
         )
         frame_count = int(frames.shape[0])
+        if source and frame_count < plan.frame_count:
+            core = self._import_core()
+            frames = core.torch.cat((frames, frames[-1:].expand(plan.frame_count - frame_count, -1, -1, -1)))
+            frame_count = plan.frame_count
         if frame_count < 5:
             raise ValueError("MiniMax H3 reference videos need at least 5 frames")
         frame_count -= (frame_count - 5) % 17
         frames = frames[:frame_count]
         soundtrack = None
         if reference.audio_file_id:
-            soundtrack = load_audio(self.resolve_input(reference.audio_file_id))
+            soundtrack = load_audio_window(self.resolve_input(reference.audio_file_id), start_seconds,
+                                          frame_count / FPS, check_canceled=check_canceled)
         elif reference.include_source_audio:
-            soundtrack = load_audio(path, optional=True)
+            soundtrack = load_audio_window(path, start_seconds,
+                                          min(frame_count / FPS, duration_seconds or frame_count / FPS),
+                                          check_canceled=check_canceled)
         return frames, soundtrack
 
-    def _build_reference_conditioning(self, plan: GenerationPlan) -> tuple[list, dict[str, Any]]:
+    def _build_reference_conditioning(self, plan: GenerationPlan, *,
+                                     check_canceled: Callable[[], None] | None = None) -> tuple[list, dict[str, Any]]:
         request = plan.request
         latent = self._empty_latent(plan)
         ref_items: list[dict[str, Any]] = []
@@ -465,8 +492,17 @@ class NativeH3Runner:
                 }
             )
 
-        for reference in request.reference_videos:
-            frames, soundtrack = self._reference_video(plan, reference)
+        references = list(request.reference_videos)
+        if request.source_video is not None:
+            references.insert(0, ReferenceVideo(file_id=request.source_video.file_id))
+        for reference in references:
+            if request.source_video is not None and reference.file_id == request.source_video.file_id:
+                frames, soundtrack = self._reference_video(plan, reference,
+                    start_seconds=request.source_video.start_seconds,
+                    duration_seconds=request.source_video.duration_seconds, source=True,
+                    check_canceled=check_canceled)
+            else:
+                frames, soundtrack = self._reference_video(plan, reference, check_canceled=check_canceled)
             encoded = self._video_vae.encode(frames)
             audio_latent, ref_audio_t = None, 0
             if soundtrack is not None:
@@ -547,10 +583,100 @@ class NativeH3Runner:
             latent_image,
             sampler,
             sigmas,
+            denoise_mask=latent.get("noise_mask"),
             callback=callback,
             disable_pbar=True,
             seed=plan.seed,
         ).to(core.model_management.intermediate_device())
+
+    def _generate_windows(
+        self, plan: GenerationPlan, model: Any, output: OutputArtifact,
+        cancel: threading.Event, progress: Callable[[float], None],
+        check_canceled: Callable[[], None],
+    ) -> None:
+        core = self._import_core()
+        previous = None
+        writer = None
+        emitted = 0
+        preserve_audio = plan.request.audio_mode == "preserve_source"
+        try:
+            for index, window in enumerate(plan.segments):
+                check_canceled()
+                count = len(plan.segments)
+
+                def report(value):
+                    progress(SegmentProgress(0.1 + 0.89 * (index + value) / count, index + 1, count))
+
+                report(0)
+                updates = {"first_frame": plan.request.first_frame if index == 0 else None,
+                           "last_frame": plan.request.last_frame if index == count - 1 else None}
+                source = plan.request.source_video
+                if source is not None:
+                    available = source.duration_seconds - window.start_frame / FPS
+                    updates["source_video"] = source.model_copy(update={
+                        "start_seconds": source.start_seconds + window.start_frame / FPS,
+                        "duration_seconds": min(available, window.frame_count / FPS)})
+                    updates["prompt"] = (
+                        "<Video 1> is the source segment to edit. Preserve its action timing, "
+                        "camera motion and scene except for the requested changes. "
+                        "Reference pictures define the requested visual appearance.\n" + plan.request.prompt)
+                request = plan.request.model_copy(update=updates)
+                segment = GenerationPlan(request, plan.seed, window.frame_count)
+                with h3_memory_scope(core.torch, core.model_management.get_torch_device(), self.settings,
+                                     model.model.diffusion_model, check_canceled):
+                    if request.mode in {GenerationMode.REF2V, GenerationMode.EDIT}:
+                        conditioning, latent = self._build_reference_conditioning(segment, check_canceled=check_canceled)
+                    else:
+                        conditioning, latent = self._build_image_conditioning(segment)
+                    check_canceled()
+                    if previous is not None:
+                        latent = continue_latent(core, latent, previous, window.trim_head,
+                                                 include_audio=not preserve_audio)
+                    report(0.2)
+                    samples = self._sample(segment, model, conditioning, latent, cancel, report)
+                    check_canceled()
+                    video_latent, audio_latent = samples.unbind()
+                    images = self._video_vae.decode(video_latent)
+                    if images.ndim == 5:
+                        images = images.reshape(-1, *images.shape[-3:])
+                    end = window.trim_head + window.output_frames
+                    if images.shape[0] < end:
+                        raise ValueError("H3 decoded fewer frames than the planned segment")
+                    images = images[window.trim_head:end]
+                    if preserve_audio:
+                        audio = load_audio_window(self.resolve_input(source.file_id),
+                            source.start_seconds + emitted / FPS, window.output_frames / FPS,
+                            check_canceled=check_canceled)
+                    else:
+                        waveform = self._audio_vae.decode(audio_latent).movedim(-1, 1)
+                        scale = (core.torch.std(waveform, dim=[1, 2], keepdim=True) * 5).clamp(min=1)
+                        waveform = waveform / scale
+                        rate = int(getattr(self._audio_vae, "audio_sample_rate", 32000))
+                        offset = round(window.trim_head * rate / FPS)
+                        audio = {"waveform": waveform[..., offset:offset + round(window.output_frames * rate / FPS)],
+                                 "sample_rate": rate}
+                    check_canceled()
+                    if writer is None:
+                        writer = SegmentedMP4Writer(output.path, request.width, request.height,
+                            with_audio=audio is not None, sample_rate=audio["sample_rate"] if audio else 32000)
+                    report(0.9)
+                    writer.append(images, audio, check_canceled)
+                    emitted += window.output_frames
+                    previous = None
+                    if index + 1 < count:
+                        tokens = _video_latent_t(plan.overlap_frames)
+                        audio_tokens = round(plan.overlap_frames * AUDIO_LATENT_FPS / FPS)
+                        previous = core.nested_tensor.NestedTensor((
+                            video_latent[:, :, -tokens:].detach().cpu().clone(),
+                            audio_latent[..., -audio_tokens:].detach().cpu().clone()))
+                    del samples, video_latent, audio_latent, images, audio, conditioning, latent
+                    if not preserve_audio:
+                        del waveform, scale
+                report(1)
+            writer.finish(check_canceled)
+        finally:
+            if writer is not None:
+                writer.close()
 
     def generate(
         self,
@@ -578,6 +704,9 @@ class NativeH3Runner:
                 self._load_common_models()
                 model = self._load_diffusion_model(plan.request.mode)
                 progress(0.1)
+                if plan.segments:
+                    self._generate_windows(plan, model, output, cancel, progress, check_canceled)
+                    return
                 if plan.request.mode == GenerationMode.REF2V:
                     conditioning, latent = self._build_reference_conditioning(plan)
                 else:

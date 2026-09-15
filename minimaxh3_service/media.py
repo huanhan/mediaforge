@@ -60,21 +60,28 @@ def load_video_frames(
     height: int,
     max_frames: int,
     fps: int = 24,
+    start_seconds: float = 0.0,
+    check_canceled: Callable[[], None] | None = None,
 ) -> Any:
     import av
     import numpy as np
     import torch
 
     selected: list[Any] = []
-    next_timestamp = 0.0
+    next_timestamp = start_seconds
     with av.open(str(path)) as container:
         if not container.streams.video:
             raise ValueError(f"video has no video stream: {path.name}")
         stream = container.streams.video[0]
+        origin = float((stream.start_time or 0) * stream.time_base)
+        if start_seconds > 0:
+            container.seek(int((start_seconds + origin) / stream.time_base), stream=stream, backward=True)
         guessed_fps = float(stream.average_rate or stream.base_rate or fps)
         frame_interval = 1.0 / max(guessed_fps, 1.0)
         for decoded_index, frame in enumerate(container.decode(stream)):
-            timestamp = float(frame.time) if frame.time is not None else decoded_index * frame_interval
+            if check_canceled:
+                check_canceled()
+            timestamp = float(frame.time) - origin if frame.time is not None else decoded_index * frame_interval
             while timestamp + frame_interval / 2 >= next_timestamp and len(selected) < max_frames:
                 resized = frame.reformat(width=width, height=height, format="rgb24")
                 selected.append(resized.to_ndarray())
@@ -85,6 +92,139 @@ def load_video_frames(
         raise ValueError(f"video contains no decodable frames: {path.name}")
     array = np.stack(selected).astype(np.float32) / 255.0
     return torch.from_numpy(array)
+
+
+def video_duration(path: Path) -> float:
+    """Read video duration, falling back to timestamp scanning without storing frames."""
+    import av
+
+    with av.open(str(path)) as container:
+        if not container.streams.video:
+            raise ValueError("source_video has no video stream")
+        stream = container.streams.video[0]
+        if stream.duration is not None:
+            return float(stream.duration * stream.time_base)
+        origin = float((stream.start_time or 0) * stream.time_base)
+        rate = float(stream.average_rate or stream.base_rate or 24)
+        end = 0.0
+        for i, frame in enumerate(container.decode(stream)):
+            end = (float(frame.time) - origin if frame.time is not None else i / rate) + 1 / rate
+        if end <= 0:
+            raise ValueError("source_video has no decodable frames")
+        return end
+
+
+def load_audio_window(path: Path, start_seconds: float, duration_seconds: float,
+                      *, sample_rate: int = 32000,
+                      check_canceled: Callable[[], None] | None = None) -> dict[str, Any] | None:
+    """Decode a bounded interval on the video timeline, retaining silence and AV offsets."""
+    import av
+    import numpy as np
+    import torch
+
+    count = round(duration_seconds * sample_rate)
+    output = np.zeros((2, count), dtype=np.float32)
+    with av.open(str(path)) as container:
+        if not container.streams.audio:
+            return None
+        stream = container.streams.audio[0]
+        timeline = container.streams.video[0] if container.streams.video else stream
+        origin = float((timeline.start_time or 0) * timeline.time_base)
+        begin = origin + start_seconds
+        container.seek(int(max(0, begin - 0.25) * av.time_base), backward=True)
+        resampler = av.AudioResampler(format="fltp", layout="stereo", rate=sample_rate)
+        fallback_time = begin
+
+        def consume(frame):
+            nonlocal fallback_time
+            timestamp = float(frame.time) if frame.time is not None else fallback_time
+            array = frame.to_ndarray()
+            offset = round((timestamp - begin) * sample_rate)
+            left, right = max(0, offset), min(count, offset + array.shape[-1])
+            if right > left:
+                output[:, left:right] = array[:, left - offset:right - offset]
+            fallback_time = timestamp + array.shape[-1] / sample_rate
+
+        for frame in container.decode(stream):
+            if check_canceled:
+                check_canceled()
+            if frame.time is not None and float(frame.time) > begin + duration_seconds + 0.1:
+                break
+            for converted in resampler.resample(frame):
+                consume(converted)
+        for converted in resampler.resample(None):
+            consume(converted)
+    return {"waveform": torch.from_numpy(output).unsqueeze(0), "sample_rate": sample_rate}
+
+
+class SegmentedMP4Writer:
+    """Encode successive batches with one codec session and a continuous timestamp clock."""
+
+    def __init__(self, path: Path, width: int, height: int, *, with_audio: bool,
+                 fps: int = 24, sample_rate: int = 32000):
+        import av
+        self.path = path
+        self.temporary = path.with_name(path.stem + ".partial.mp4")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.container = av.open(str(self.temporary), "w")
+        self.video = self.container.add_stream("libx264", rate=fps)
+        self.video.width, self.video.height = width, height
+        self.video.pix_fmt = "yuv420p"
+        self.video.options = {"crf": "20", "preset": "medium"}
+        self.audio = self.container.add_stream("aac", rate=sample_rate) if with_audio else None
+        if self.audio:
+            self.audio.layout = "stereo"
+            self.audio.bit_rate = 192_000
+        self.fps, self.sample_rate = fps, sample_rate
+        self.frames = self.samples = 0
+
+    def append(self, images: Any, audio: dict[str, Any] | None,
+               check_canceled: Callable[[], None]) -> None:
+        import av
+        import numpy as np
+        for image in images:
+            check_canceled()
+            array = image[..., :3].detach().float().clamp(0, 1).mul(255).byte().cpu().numpy()
+            frame = av.VideoFrame.from_ndarray(np.ascontiguousarray(array), format="rgb24")
+            frame.pts, frame.time_base = self.frames, Fraction(1, self.fps)
+            for packet in self.video.encode(frame):
+                self.container.mux(packet)
+            self.frames += 1
+        if self.audio is not None:
+            end = round(self.frames * self.sample_rate / self.fps)
+            required = end - self.samples
+            waveform = np.zeros((2, required), dtype=np.float32)
+            if audio is not None:
+                if audio["sample_rate"] != self.sample_rate:
+                    raise ValueError("segment audio sample rate mismatch")
+                data = audio["waveform"][0].detach().float().cpu().clamp(-1, 1).numpy()
+                if data.shape[0] == 1:
+                    data = np.repeat(data, 2, axis=0)
+                count = min(required, data.shape[-1])
+                waveform[:, :count] = data[:2, :count]
+            for offset in range(0, required, 1024):
+                check_canceled()
+                frame = av.AudioFrame.from_ndarray(np.ascontiguousarray(waveform[:, offset:offset + 1024]),
+                                                  format="fltp", layout="stereo")
+                frame.sample_rate = self.sample_rate
+                frame.pts, frame.time_base = self.samples + offset, Fraction(1, self.sample_rate)
+                for packet in self.audio.encode(frame):
+                    self.container.mux(packet)
+            self.samples = end
+
+    def finish(self, check_canceled: Callable[[], None]) -> None:
+        for stream in (self.video, self.audio):
+            if stream is not None:
+                for packet in stream.encode():
+                    check_canceled()
+                    self.container.mux(packet)
+        self.container.close()
+        check_canceled()
+        self.temporary.replace(self.path)
+
+    def close(self) -> None:
+        self.container.close()
+        self.temporary.unlink(missing_ok=True)
 
 
 def load_audio(path: Path, *, sample_rate: int = 32000, optional: bool = False) -> dict[str, Any] | None:

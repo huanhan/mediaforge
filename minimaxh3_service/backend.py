@@ -50,6 +50,8 @@ class BackendSubmission:
     queue_number: int
     frame_count: int
     effective_duration_seconds: float
+    segment_count: int = 1
+    actual_overlap_frames: int = 0
 
 
 @dataclass(frozen=True, slots=True)

@@ -17,7 +17,7 @@ from .backend import (
     UpscaleSubmission,
 )
 from .models import GenerationRequest, UpscaleRequest
-from .workflow import GenerationPlan, build_plan
+from .workflow import GenerationPlan, SegmentProgress, build_plan
 
 
 logger = logging.getLogger(__name__)
@@ -135,6 +135,9 @@ class LocalTaskManager:
                 status="queued",
                 kind="generation",
                 progress=0.0,
+                raw_status={"segment_count": len(plan.segments) or 1,
+                            "actual_overlap_frames": plan.overlap_frames,
+                            "frame_count": plan.frame_count},
             ),
             kind="generation",
             payload=plan,
@@ -146,6 +149,8 @@ class LocalTaskManager:
             queue_number=queue_number,
             frame_count=plan.frame_count,
             effective_duration_seconds=plan.effective_duration_seconds,
+            segment_count=len(plan.segments) or 1,
+            actual_overlap_frames=plan.overlap_frames,
         )
 
     async def submit_upscale(self, request: UpscaleRequest) -> UpscaleSubmission:
@@ -333,3 +338,6 @@ class LocalTaskManager:
         record = self.records.get(task_id)
         if record is not None and record.task.status == "running":
             record.task.progress = min(0.99, max(0.0, value))
+            if isinstance(value, SegmentProgress):
+                record.task.raw_status = {**(record.task.raw_status or {}),
+                    "current_segment": value.segment, "segment_count": value.count}

@@ -266,7 +266,7 @@ def create_app(
             or service_settings.model_paths["ref2va_acceleration_lora"].is_file()
         )
         if ref2v_ready:
-            modes.append("ref2v")
+            modes.extend(["ref2v", "edit"])
         readiness = await _backend(request).ready()
         upscale_readiness = readiness.get("upscale") or {"status": "unknown"}
         return ModelCatalog.model_validate({
@@ -276,6 +276,11 @@ def create_app(
             "capabilities": {
                 "modes": modes,
                 "duration_seconds": {"min": 4, "max": 15},
+                "segmentation": {"available": True, "max_duration_seconds": 600,
+                    "segment_seconds": {"min": 4, "max": 15, "default": 10},
+                    "overlap_frames_default": 48, "overlap_alignment": "floor to 17k+5",
+                    "continuation": "fixed_latent_prefix"},
+                "edit": {"available": ref2v_ready, "audio_modes": ["generate", "preserve_source"]},
                 "fps": 24,
                 "audio": "32000 Hz stereo",
                 "max_reference_images": 9,
@@ -350,7 +355,8 @@ def create_app(
         tags=["generation"],
         summary="Submit a video generation task",
         description=(
-            "Queues a t2v, fl2v, or ref2v request on the shared GPU worker. Uploaded media "
+            "Queues a t2v, fl2v, ref2v, or edit request on the shared GPU worker. "
+            "Enable segmentation for overlapping latent continuation and one merged output. Uploaded media "
             "must be referenced by file_id."
         ),
         operation_id="create_generation",
@@ -367,6 +373,8 @@ def create_app(
             queue_number=submitted.queue_number,
             effective_duration_seconds=submitted.effective_duration_seconds,
             frame_count=submitted.frame_count,
+            segment_count=submitted.segment_count,
+            actual_overlap_frames=submitted.actual_overlap_frames,
         )
 
     @router.post(
