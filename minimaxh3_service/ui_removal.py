@@ -93,7 +93,7 @@ def add_removal_ui(client):
             raise gr.Error(str(exc)) from exc
 
     def submit_removal(video, selected_video, box, output_mode, max_side, repair_size, max_frames, dilation,
-                       objects=None, index=0, loaded_index=0):
+                       objects=None, index=0, loaded_index=0, foreground_background="color", background_color="#00ff00"):
         try:
             if not video or video != selected_video:
                 raise ValueError("请等待当前视频首帧加载完毕，再选择目标。")
@@ -106,6 +106,7 @@ def add_removal_ui(client):
                     raise ValueError("请至少添加一个目标。")
                 objects = add_target([], "object-1", int(index), box)
             result = client.submit_removal(video, dict(objects=objects, output_mode=output_mode,
+                foreground_background=foreground_background, background_color=background_color,
                 max_side=int(max_side), repair_size=int(repair_size), max_frames=int(max_frames), dilation=int(dilation)))
             return (result["id"], f"已排队 · {result['id']} · 队列位置 {result['queue_number']}",
                     None, None, [], "", [], gr.Timer(active=True), gr.Dropdown(choices=[], value=None))
@@ -127,10 +128,10 @@ def add_removal_ui(client):
             files = cached_files if task_id == cached_id else []
             if state == "succeeded" and not files:
                 files = client.download(task.get("outputs", []))
-            previews = [p for p in files if p.endswith("foreground-preview.mp4")]
+            previews = [p for p in files if p.endswith(("foreground-preview.mp4", "foreground-preview.webm"))]
             foreground = selected if selected in previews else next(iter(previews), None)
             background = next((p for p in files if p.endswith("background.mp4")), None)
-            choices = [(Path(p).name.split("-object-")[-1].removesuffix("-foreground-preview.mp4"), p) for p in previews]
+            choices = [(Path(p).stem.split("-object-")[-1].removesuffix("-foreground-preview"), p) for p in previews]
             return message, foreground, background, files, task_id, files, gr.Timer(active=state in {"queued", "running"}), gr.Dropdown(choices=choices, value=foreground)
         except (ValueError, OSError, httpx.HTTPError) as exc:
             return f"查询失败，可刷新重试：{exc}", gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.Timer(active=False), gr.skip()
@@ -162,8 +163,12 @@ def add_removal_ui(client):
                 with gr.Row():
                     undo = gr.Button("移除最后一个目标", size="sm")
                     clear = gr.Button("清空目标列表", size="sm")
-                output_mode = gr.Radio([("透明前景", "foreground"), ("只保留背景", "background"),
+                output_mode = gr.Radio([("分离前景", "foreground"), ("只保留背景", "background"),
                                         ("前景和背景", "both")], value="foreground", label="输出内容")
+                with gr.Group() as foreground_options:
+                    foreground_background = gr.Radio([("指定颜色（默认绿幕）", "color"), ("透明", "transparent")],
+                                                       value="color", label="分离前景的背景")
+                    background_color = gr.ColorPicker(value="#00ff00", label="背景颜色")
                 with gr.Accordion("处理参数", open=False):
                     max_side = gr.Slider(256, 1920, value=1280, step=8, label="输出最长边（不放大源视频）")
                     repair_size = gr.Slider(256, 768, value=640, step=8, label="背景修复精度（最长边）")
@@ -178,16 +183,20 @@ def add_removal_ui(client):
                     refresh = gr.Button("刷新分离进度")
                     cancel = gr.Button("取消分离任务")
                 preview_choice = gr.Dropdown(choices=[], label="选择前景预览", interactive=True)
-                foreground = gr.Video(label="前景预览（棋盘格仅用于展示）", interactive=False)
+                foreground = gr.Video(label="分离前景（绿幕 / 自定义底色 / 透明）", interactive=False)
                 background = gr.Video(label="背景修复结果", interactive=False)
-                downloads = gr.File(label="下载分离结果（透明 MOV / 遮罩 / MP4）", file_count="multiple", interactive=False)
-                gr.Markdown("保留可用原音轨。透明 MOV 可导入剪辑软件；预览 MP4 不透明。运行中取消需服务端启用 H3_ALLOW_INTERRUPT_RUNNING。")
+                downloads = gr.File(label="下载分离结果（MOV / WebM / MP4 / 遮罩）", file_count="multiple", interactive=False)
+                gr.Markdown("指定颜色输出 MP4；透明模式输出带 Alpha 的 WebM，不烧录棋盘格。两种模式都额外提供透明 MOV 用于剪辑。运行中取消需服务端启用 H3_ALLOW_INTERRUPT_RUNNING。")
         original, points, box = gr.State(None), gr.State([]), gr.State(None)
         selected_video = gr.State(None)
         loaded_index = gr.State(0)
         objects = gr.State([])
         cached_id, cached_files = gr.State(""), gr.State([])
         timer = gr.Timer(3, active=False)
+        foreground_background.change(lambda mode: gr.ColorPicker(visible=mode == "color"),
+                                     foreground_background, background_color, queue=False)
+        output_mode.change(lambda mode: gr.Group(visible=mode != "background"), output_mode,
+                           foreground_options, queue=False)
         video.change(load_removal_frame, video, [selector, original, points, box, selection_status, selected_video,
                                                frame_index, loaded_index, objects, targets_table, target_name])
         load_frame.click(load_reference, [video, frame_index], [selector, original, points, box, selection_status, selected_video, loaded_index])
@@ -199,7 +208,7 @@ def add_removal_ui(client):
         reset.click(lambda image: (image, [], None, "请重新点击两个角。"), original,
                     [selector, points, box, selection_status])
         start.click(submit_removal, [video, selected_video, box, output_mode, max_side, repair_size, max_frames, dilation,
-                                    objects, frame_index, loaded_index],
+                                    objects, frame_index, loaded_index, foreground_background, background_color],
                     [task_id, status, foreground, background, downloads, cached_id, cached_files, timer, preview_choice])
         for event in (timer.tick, refresh.click):
             event(refresh_removal, [task_id, cached_id, cached_files, preview_choice],

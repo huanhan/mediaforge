@@ -1506,6 +1506,21 @@
             "title": "Output Mode",
             "default": "foreground"
           },
+          "foreground_background": {
+            "type": "string",
+            "enum": [
+              "color",
+              "transparent"
+            ],
+            "title": "Foreground Background",
+            "default": "color"
+          },
+          "background_color": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "title": "Background Color",
+            "default": "#00ff00"
+          },
           "max_side": {
             "type": "integer",
             "maximum": 1920.0,

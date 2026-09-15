@@ -150,7 +150,8 @@ class VideoRemovalRunner:
             command = ["ffmpeg", "-nostdin", "-n", "-v", "error", "-framerate", str(fps),
                        "-i", str(pattern)]
             if audio:
-                command += ["-i", str(source), "-map", "0:v:0", "-map", "1:a:0?", "-c:a", "aac"]
+                command += ["-i", str(source), "-map", "0:v:0", "-map", "1:a:0?",
+                            "-c:a", "libopus" if target.suffix == ".webm" else "aac"]
             command += [*options, "-t", str(count / float(fps)), str(target)]
             run_command(command, cancel)
             with av.open(str(target)) as container:
@@ -164,8 +165,14 @@ class VideoRemovalRunner:
             prefix = f"object-{obj.id}-" if request.objects else ""
             files = {"id": obj.id, "frame_index": obj.frame_index, "box": obj.box}
             if foreground:
-                self._export_foreground(source, size, selected_masks, check)
-                encode(selected_masks.parent / "preview/%06d.jpg", prefix + "foreground-preview.mp4", mp4)
+                self._export_foreground(source, size, selected_masks, check,
+                                        request.foreground_background, request.background_color)
+                if request.foreground_background == "transparent":
+                    encode(selected_masks.parent / "rgba/%06d.png", prefix + "foreground-preview.webm",
+                           ["-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-auto-alt-ref", "0",
+                            "-b:v", "0", "-crf", "24"])
+                else:
+                    encode(selected_masks.parent / "preview/%06d.jpg", prefix + "foreground-preview.mp4", mp4)
                 files["preview"] = results[-1].name
                 encode(selected_masks.parent / "rgba/%06d.png", prefix + "foreground-alpha.mov",
                        ["-c:v", "prores_ks", "-profile:v", "4", "-pix_fmt", "yuva444p10le"])
@@ -184,20 +191,18 @@ class VideoRemovalRunner:
         manifest = work / "objects.json"
         manifest.write_text(json.dumps({"objects": object_results, "frames": count, "fps": str(fps),
             "size": size, "union_mask": "mask.mp4", "background": "background.mp4" if background else None,
+            "foreground_background": request.foreground_background, "background_color": request.background_color,
             "before_reference_frame": "transparent", "overlap_policy": "highest_score_visible_pixel"},
             ensure_ascii=False, indent=2), encoding="utf-8")
         results.append(manifest)
         return results
 
     @staticmethod
-    def _export_foreground(source, size, masks, check):
+    def _export_foreground(source, size, masks, check, foreground_background="color", background_color="#00ff00"):
         import av
-        import numpy as np
         from PIL import Image
         rgba_dir, preview = masks.parent / "rgba", masks.parent / "preview"
         rgba_dir.mkdir(); preview.mkdir()
-        y, x = np.indices((size[1], size[0]))
-        board = np.repeat(np.where(((x // 32 + y // 32) % 2)[..., None], 190, 235), 3, axis=2).astype("uint8")
         # Re-decode the source to avoid JPEG compression in exported foregrounds.
         with av.open(str(source)) as container:
             for i, decoded in enumerate(container.decode(video=0)):
@@ -206,8 +211,10 @@ class VideoRemovalRunner:
                 with Image.open(masks / f"{i:06d}.png") as mask:
                     rgba = image.convert("RGBA"); rgba.putalpha(mask)
                     rgba.save(rgba_dir / f"{i:06d}.png")
-                    canvas = Image.fromarray(board); canvas.paste(image, (0, 0), mask)
-                    canvas.save(preview / f"{i:06d}.jpg", quality=95)
+                    if foreground_background == "color":
+                        canvas = Image.new("RGB", size, background_color)
+                        canvas.paste(image, (0, 0), mask)
+                        canvas.save(preview / f"{i:06d}.jpg", quality=95)
 
     def _repair_background(self, request, source, work, frames, masks, count, size,
                            cancel, check, progress, encode, mp4):

@@ -47,6 +47,41 @@ def test_multi_objects_and_legacy_box_normalize():
         add_target(items, "DOG", 0, [0, 0, 1, 1])
 
 
+def test_foreground_background_defaults_and_color_validation():
+    request = RemovalRequest(file_id="a.mp4", box=[0, 0, 1, 1])
+    assert request.foreground_background == "color" and request.background_color == "#00ff00"
+    with pytest.raises(ValueError):
+        RemovalRequest(file_id="a.mp4", box=[0, 0, 1, 1], background_color="not-a-color")
+
+
+@pytest.mark.parametrize("mode,color", [("color", "#00ff00"), ("color", "#1234ab"), ("transparent", "#00ff00")])
+def test_foreground_export_uses_color_or_real_alpha(tmp_path, mode, color):
+    av = pytest.importorskip("av")
+    np = pytest.importorskip("numpy")
+    Image = pytest.importorskip("PIL.Image")
+    from minimaxh3_service.removal import VideoRemovalRunner
+    source = tmp_path / "source.mp4"
+    with av.open(str(source), "w") as container:
+        stream = container.add_stream("libx264", rate=24)
+        stream.width, stream.height, stream.pix_fmt = 96, 64, "yuv420p"
+        frame = av.VideoFrame.from_ndarray(np.full((64, 96, 3), 100, dtype=np.uint8), format="rgb24")
+        for packet in stream.encode(frame): container.mux(packet)
+        for packet in stream.encode(): container.mux(packet)
+    masks = tmp_path / "masks"; masks.mkdir()
+    mask = np.zeros((64, 96), dtype=np.uint8); mask[:, :32] = 255
+    Image.fromarray(mask).save(masks / "000000.png")
+    VideoRemovalRunner._export_foreground(source, (96, 64), masks, lambda: None, mode, color)
+    with Image.open(tmp_path / "rgba/000000.png") as rgba:
+        assert rgba.getpixel((80, 30))[3] == 0
+        assert rgba.getpixel((10, 30))[3] == 255
+    if mode == "color":
+        with Image.open(tmp_path / "preview/000000.jpg") as image:
+            expected = tuple(int(color[i:i+2], 16) for i in (1, 3, 5))
+            assert max(abs(a-b) for a,b in zip(image.getpixel((80, 30)), expected)) <= 3
+    else:
+        assert not list((tmp_path / "preview").iterdir())
+
+
 def test_overlap_assignment_and_late_objects():
     np = pytest.importorskip("numpy")
     scores = np.array([[[2, -1], [3, 1]], [[4, 0], [2, 5]]])
@@ -211,13 +246,15 @@ def test_ui_submits_multiple_objects_and_preserves_preview_choice():
     client.submit_removal = send
     targets = [{"id": "person", "frame_index": 0, "box": [0, 0, .5, 1]},
                {"id": "dog", "frame_index": 5, "box": [.5, .5, 1, 1]}]
-    result = submit("v.mp4", "v.mp4", None, "both", 640, 640, 600, 8, targets, 5, 5)
+    result = submit("v.mp4", "v.mp4", None, "both", 640, 640, 600, 8, targets, 5, 5, "transparent", "#123456")
     assert result[0] == "multi" and captured[0]["objects"] == targets
+    assert captured[0]["foreground_background"] == "transparent"
+    assert captured[0]["background_color"] == "#123456"
     assert "box" not in captured[0]
     with pytest.raises(Exception, match="尚未加入"):
         submit("v.mp4", "v.mp4", [0, 0, 1, 1], "both", 640, 640, 600, 8, targets, 5, 5)
     refresh = next(fn.fn for fn in demo.fns.values() if fn.fn.__name__ == "refresh_removal")
-    files = ["test-object-person-foreground-preview.mp4", "test-object-dog-foreground-preview.mp4"]
+    files = ["test-object-person-foreground-preview.mp4", "test-object-dog-foreground-preview.webm"]
     client.task = lambda id: {"status": "succeeded"}
     result = refresh("multi", "multi", files, files[1])
     assert result[1] == files[1]

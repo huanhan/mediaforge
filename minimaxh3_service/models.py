@@ -356,6 +356,8 @@ class RemovalRequest(BaseModel):
     box: tuple[float, float, float, float] | None = None
     objects: list[RemovalObject] | None = Field(default=None, min_length=1, max_length=8)
     output_mode: Literal["foreground", "background", "both"] = "foreground"
+    foreground_background: Literal["color", "transparent"] = "color"
+    background_color: str = Field(default="#00ff00", pattern=r"^#[0-9a-fA-F]{6}$")
     max_side: int = Field(default=1280, ge=256, le=1920)
     repair_size: int = Field(default=640, ge=256, le=768)
     max_frames: int = Field(default=600, ge=2, le=900)
