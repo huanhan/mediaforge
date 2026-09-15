@@ -60,6 +60,7 @@ class FakeLocalBackend:
         )
 
     async def submit(self, request: GenerationRequest) -> BackendSubmission:
+        self.generation_request = request
         self.tasks["task-123"] = BackendTask(
             id="task-123", status="queued", kind="generation", progress=0.0
         )
@@ -440,3 +441,44 @@ def test_edit_size_presets_http_contract(tmp_path):
         assert (fake.edit_request.width, fake.edit_request.height) == (608, 352)
         for extra in ({"width": 608}, {"resolution": "invalid"}, {"aspect_ratio": "invalid"}):
             assert client.post("/v1/edits", json={**body, **extra}).status_code == 422
+
+
+def test_sampling_is_server_owned_for_generation_and_edit(tmp_path):
+    client, fake = make_client(tmp_path)
+    removed = {"steps": 20, "sampler_name": "res_multistep", "scheduler": "simple"}
+    with client:
+        schemas = client.get("/openapi.json").json()["components"]["schemas"]
+        for endpoint, schema, payload in [
+            ("/v1/generations", "GenerationRequest", {"prompt": "test"}),
+            ("/v1/edits", "VideoEditRequest", {"prompt": "test", "source_video": {"file_id": "source.mp4"}}),
+        ]:
+            assert not removed.keys() & schemas[schema]["properties"].keys()
+            for name, value in removed.items():
+                response = client.post(endpoint, json={**payload, name: value})
+                assert response.status_code == 422
+                assert any(error["loc"] == ["body", name] and error["type"] == "extra_forbidden"
+                           for error in response.json()["detail"])
+            assert client.post(endpoint, json=payload).status_code == 202
+
+
+def test_generation_size_presets_http_contract(tmp_path):
+    client, fake = make_client(tmp_path)
+    with client:
+        for mode, media in [("t2v", {}), ("fl2v", {"first_frame": "f.png"}),
+                            ("ref2v", {"reference_images": ["r.png"]})]:
+            body = {"prompt": "x", "mode": mode, **media, "resolution": "480p", "aspect_ratio": "9:16"}
+            for extra, expected in [({}, (480, 832)), ({"width": 608, "height": 352}, (608, 352)),
+                                    ({"width": None, "height": None}, (480, 832)),
+                                    ({"resolution": "2160p"}, (736, 1344))]:
+                assert client.post("/v1/generations", json={**body, **extra}).status_code == 202
+                assert (fake.generation_request.width, fake.generation_request.height) == expected
+            for extra in ({"width": 608}, {"height": 352}, {"width": 350, "height": 640},
+                          {"resolution": "invalid"}, {"aspect_ratio": "invalid"}):
+                assert client.post("/v1/generations", json={**body, **extra}).status_code == 422
+        assert client.post("/v1/generations", json={"prompt": "x"}).status_code == 202
+        assert (fake.generation_request.width, fake.generation_request.height) == (1344, 768)
+        schema = client.get("/openapi.json").json()["components"]["schemas"]
+        for field in ("resolution", "aspect_ratio"):
+            assert schema["GenerationRequest"]["properties"][field] == schema["VideoEditRequest"]["properties"][field]
+        size = client.get("/v1/models").json()["capabilities"]["generation_size"]
+        assert size["default_width"] == 1344 and "480p" in size["resolutions"]

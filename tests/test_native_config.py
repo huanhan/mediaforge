@@ -132,20 +132,10 @@ def test_acceleration_lora_uses_turbo_sampling_parameters(
     )
 
 
-def test_disabled_acceleration_lora_preserves_request_sampling_parameters() -> None:
-    request = GenerationRequest(
-        prompt="base model",
-        steps=12,
-        sampler_name="res_multistep",
-        scheduler="beta",
-    )
-
-    assert runner(
-        Settings(enable_acceleration_lora=False)
-    )._sampling_options(build_plan(request)) == (
-        12,
-        "res_multistep",
-        "beta",
+def test_disabled_acceleration_lora_uses_server_base_sampling_parameters() -> None:
+    request = GenerationRequest(prompt="base model")
+    assert runner(Settings(enable_acceleration_lora=False))._sampling_options(build_plan(request)) == (
+        20, "res_multistep", "simple",
     )
 
 

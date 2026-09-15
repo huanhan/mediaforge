@@ -40,8 +40,7 @@ def test_edit_ui_uploads_source_and_background_and_preserves_duration_omission(t
     # Exercise the actual Number preprocessing which previously rejected cleared inputs.
     processed_canvas = [component.preprocess(value) for component, value in zip(event.inputs[7:9], canvas)]
     result = callback(demo, "edit_submit")("Replace background", str(source), [str(background)],
-        2, whole, 30, "preserve_source", *processed_canvas, "358", 20,
-        "res_multistep", "simple", 1, None, "match", True, 10, 48)
+        2, whole, 30, "preserve_source", *processed_canvas, "358", 1, None, "match", True, 10, 48)
     assert uploaded == ["video", "image"]
     body = submitted[0]
     assert (body.get("width"), body.get("height")) == tuple(value or None for value in canvas)
@@ -79,7 +78,7 @@ def test_edit_ui_still_rejects_invalid_custom_sizes_before_upload(canvas):
     processed = [component.preprocess(value) for component, value in zip(event.inputs[7:9], canvas)]
     with pytest.raises(gr.Error):
         event.fn("x", "source.mp4", [], 0, True, 10, "preserve_source", *processed,
-                 "1", 20, "res_multistep", "simple", 1, None, "match")
+                 "1", 1, None, "match")
 
 
 def test_edit_requires_source_and_validates_reference_limit_before_network():
@@ -88,8 +87,7 @@ def test_edit_requires_source_and_validates_reference_limit_before_network():
         pytest.fail("invalid request contacted the API")
     demo = build_ui(VideoClient("http://test", transport=httpx.MockTransport(unexpected)))
     submit = callback(demo, "edit_submit")
-    args = ["x", None, [], 0, True, 10, "preserve_source", 352, 640, "1", 20,
-            "res_multistep", "simple", 1, None, "match"]
+    args = ["x", None, [], 0, True, 10, "preserve_source", 352, 640, "1", 1, None, "match"]
     with pytest.raises(gr.Error):
         submit(*args)
     args[1:3] = ["v.mp4", ["p.png"] * 10]
@@ -124,7 +122,7 @@ def test_segmented_t2v_callback_keeps_edit_fields_out():
         payloads.append(json.loads(request.content))
         return httpx.Response(202, json={"id": "long", "effective_duration_seconds": 60, "frame_count": 1440})
     demo = build_ui(VideoClient("http://test", transport=httpx.MockTransport(handle)))
-    callback(demo, "submit")("x", "t2v", 60, 608, 352, "1", 20, "res_multistep", "simple", 1,
+    callback(demo, "submit")("x", "t2v", 60, 608, 352, "1", 1,
         None, None, None, None, None, None, True, "match", segmented=True)
     assert payloads[0]["duration_seconds"] == 60 and "source_video" not in payloads[0]
 
@@ -154,8 +152,8 @@ def test_edit_tab_presets_and_size_priority(tmp_path, canvas, resolution, ratio,
     assert event.inputs[-2].value == "source"
     assert event.inputs[-1].interactive is False
     args = ["x", str(video), [], 0, True, 10, "preserve_source", *canvas,
-            "1", 20, "res_multistep", "simple", 1, None, "match", False, 10, 48, resolution, ratio]
-    for index in (7, 8, 19, 20):
+            "1", 1, None, "match", False, 10, 48, resolution, ratio]
+    for index in (7, 8, -2, -1):
         args[index] = event.inputs[index].preprocess(args[index])
     event.fn(*args)
     assert (submitted[0].get("width"), submitted[0].get("height")) == expected

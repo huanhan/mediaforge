@@ -15,14 +15,12 @@ def test_frame_count_uses_h3_grid() -> None:
     assert all(frame_count_for_duration(seconds) % 17 == 5 for seconds in (4, 5, 8, 10, 15))
 
 
-def test_build_plan_preserves_sampling_inputs() -> None:
+def test_build_plan_preserves_request_and_seed() -> None:
     request = GenerationRequest(
         prompt="A cinematic city scene",
         seed=42,
         width=864,
         height=480,
-        steps=12,
-        scheduler="beta",
     )
     plan = build_plan(request)
 

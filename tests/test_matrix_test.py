@@ -173,7 +173,6 @@ def test_run_case_submits_polls_and_downloads_sequentially(tmp_path: Path, monke
         index=1,
         total_cases=1,
         prompt="test prompt",
-        steps=7,
         seed=42,
         output_dir=tmp_path,
         poll_interval=0.001,
@@ -193,7 +192,6 @@ def test_run_case_submits_polls_and_downloads_sequentially(tmp_path: Path, monke
             "duration_seconds": 4.0,
             "width": 608,
             "height": 352,
-            "steps": 7,
             "seed": 42,
         }
     ]
@@ -234,7 +232,6 @@ def test_timeout_attempts_remote_cancellation(tmp_path: Path) -> None:
         index=1,
         total_cases=1,
         prompt="test",
-        steps=1,
         seed=1,
         output_dir=tmp_path,
         poll_interval=0.001,

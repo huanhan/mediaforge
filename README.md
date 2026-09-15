@@ -69,8 +69,8 @@ uv run minimaxh3-setup --accept-license --with-ref2v
 
 Acceleration LoRA 默认下载并启用：T2V/FL2V 使用官方 8-step Turbo LoRA，Ref2V
 安装时同时下载 4-step Turbo LoRA。开关启用时，T2V/FL2V 固定使用官方推荐的
-`euler + simple + 8 steps`，Ref2V 使用 `euler + simple + 4 steps`；请求中的
-`steps`、`sampler_name` 和 `scheduler` 会由 Turbo 配置覆盖。
+`euler + simple + 8 steps`，Ref2V / 视频编辑使用 `euler + simple + 4 steps`。
+采样参数由服务端管理，生成和编辑接口不接受 `steps`、`sampler_name`、`scheduler`。
 
 如需关闭并跳过 LoRA 下载：
 
@@ -79,7 +79,7 @@ uv run minimaxh3-setup --accept-license --without-acceleration-lora
 $env:H3_ENABLE_ACCELERATION_LORA = "false"
 ```
 
-关闭时完全保留请求的原有采样参数。
+关闭时统一使用服务端基础配置：`res_multistep + simple + 20 steps`。
 
 如不需要图片超分，可跳过 SeedVR2 后端和权重：
 
@@ -319,3 +319,5 @@ $env:H3_MLP_CHUNK_ROWS="0"
 Gradio `/ui/` 通过“视频生成”和“视频编辑”独立 Tab 区分功能。旧 `/v1/generations` 不再支持 `mode=edit`；编辑请求不带 `mode`，详见 [对接文档](docs/INTEGRATION.md)。
 
 视频编辑接口 `/v1/edits` 和 Gradio“视频编辑”Tab 支持清晰度和比例，优先级为显式宽高 > 清晰度与比例 > 源视频尺寸；编辑默认沿用源视频尺寸。
+
+视频生成 `/v1/generations`（t2v / fl2v / ref2v）与视频编辑 `/v1/edits` 均支持 `resolution` / `aspect_ratio`，采用相同的清晰度档位、比例和像素限制。显式宽高优先于档位；未指定尺寸时，生成默认 1344×768，编辑沿用源视频尺寸。生成和编辑 Gradio 表单均支持档位选择，详见 [对接指南](docs/INTEGRATION.md)。

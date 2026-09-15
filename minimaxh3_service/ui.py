@@ -147,23 +147,29 @@ def build_ui(client: VideoClient):
                     (" · 支持重叠分段" if capabilities.get("segmentation", {}).get("available") else " · 分段不可用") +
                     (" · 人物分离可用" if removal.get("foreground_available") else " · 人物分离未就绪") +
                     (" · 背景修复可用" if removal.get("background_available") else " · 背景修复未就绪") +
-                    ("\n\nTurbo 已开启：文生/首尾帧固定 Euler + simple + 8 步，参考/编辑模式固定 4 步；下方采样设置会被覆盖。"
-                     if turbo else "\n\nTurbo 已关闭：使用下方采样设置。"))
+                    ("\n\nTurbo 已开启：文生/首尾帧固定 Euler + simple + 8 步，参考/编辑模式固定 4 步。"
+                     if turbo else "\n\nTurbo 已关闭：使用服务端基础采样配置。"))
         except (httpx.HTTPError, ValueError) as exc:
             return f"无法连接服务：{exc}"
 
-    def submit(prompt, mode, duration, width, height, seed, steps, sampler, scheduler,
+    def submit(prompt, mode, duration, width, height, seed,
                denoise, prefix, first, last, images, videos, audios, source_audio, ref_size,
                segmented=False,
-               segment_seconds=10, overlap_frames=48):
+               segment_seconds=10, overlap_frames=48, resolution="default", aspect_ratio="16:9"):
         try:
             seed = (seed or "").strip()
             prefix = (prefix or "").strip()
             parameters = dict(prompt=prompt, mode=mode, duration_seconds=duration,
                               width=width, height=height, seed=int(seed) if seed else None,
-                              steps=steps, sampler_name=sampler, scheduler=scheduler,
                               denoise=denoise, filename_prefix=prefix or None,
                               ref_image_size=ref_size)
+            if (width in (None, 0)) != (height in (None, 0)):
+                raise ValueError("请同时填写宽高，或同时留空。")
+            if width in (None, 0) and height in (None, 0):
+                parameters.pop("width")
+                parameters.pop("height")
+            parameters.update(resolution=None if resolution == "default" else resolution,
+                              aspect_ratio=aspect_ratio)
             parameters["segmentation"] = dict(enabled=segmented, segment_seconds=segment_seconds,
                                                overlap_frames=overlap_frames) if segmented else {"enabled": False}
             media = {}
@@ -186,6 +192,7 @@ def build_ui(client: VideoClient):
             message = (f"已提交 · {task_id} · 队列位置 {submitted.get('queue_number', '未知')}\n"
                        f"有效时长 {submitted['effective_duration_seconds']:.2f} 秒 · "
                        f"{submitted['frame_count']} 帧 · 种子 {payload['seed']}")
+            message += f"\n输出尺寸 {payload['width']}×{payload['height']}"
             if segmented:
                 message += (f"\n共 {submitted.get('segment_count', 1)} 段 · "
                             f"实际重叠 {submitted.get('actual_overlap_frames', 0)} 帧")
@@ -262,15 +269,16 @@ def build_ui(client: VideoClient):
                         overlap_frames = gr.Slider(5, 345, value=48, step=1, label="重叠帧数（24 FPS）")
                         gr.Markdown("总时长最长 600 秒。默认每段实际 10.125 秒、重叠 39 帧（1.625 秒）；实际重叠须短于段长。自动续接和合并为一个视频。")
                     with gr.Row():
-                        width = gr.Number(value=608, minimum=32, maximum=8192, precision=0, label="宽度")
-                        height = gr.Number(value=352, minimum=32, maximum=8192, precision=0, label="高度")
-                    gr.Markdown("宽高须为 32 的倍数，总像素不超过 1,032,192。较大的尺寸和时长需要更多显存与时间。")
+                        resolution = gr.Dropdown([("默认尺寸 1344×768", "default"), "360p", "480p", "540p", "720p", "1080p", "1440p", "2160p"],
+                                                 value="360p", label="生成输出清晰度")
+                        aspect_ratio = gr.Dropdown(["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"],
+                                                   value="16:9", label="生成画面比例（选择清晰度档位时生效）")
+                    with gr.Row():
+                        width = gr.Number(value=None, minimum=0, maximum=8192, precision=0, label="生成输出宽度（留空或 0 自动）")
+                        height = gr.Number(value=None, minimum=0, maximum=8192, precision=0, label="生成输出高度（留空或 0 自动）")
+                    gr.Markdown("尺寸优先级：自定义宽高 → 清晰度和比例 → 默认 1344×768。自定义宽高须同时填写，为 32 的倍数，总像素不超过 1,032,192。高档位会缩小并对齐到模型尺寸限制。")
                     seed = gr.Textbox(label="随机种子", placeholder="留空随机；填入整数可复现")
                     with gr.Accordion("采样与输出参数", open=False):
-                        gr.Markdown("Turbo 开启时会覆盖步数、采样器、调度器。自定义采样须在服务端设置 H3_ENABLE_ACCELERATION_LORA=false 后重启服务。")
-                        steps = gr.Slider(1, 100, value=20, step=1, label="采样步数")
-                        sampler = gr.Textbox(value="res_multistep", label="采样器")
-                        scheduler = gr.Radio(["simple", "beta", "normal"], value="simple", label="调度器")
                         denoise = gr.Slider(0.01, 1, value=1, step=0.01, label="去噪强度")
                         prefix = gr.Textbox(label="输出文件名前缀（可选）", placeholder="例如 gradio/demo")
                     generate = gr.Button("生成视频", variant="primary")
@@ -289,13 +297,13 @@ def build_ui(client: VideoClient):
             cached_id = gr.State("")
             cached_files = gr.State([])
             timer = gr.Timer(3, active=False)
+            resolution.change(lambda value: gr.Dropdown(interactive=value != "default"), resolution, aspect_ratio, queue=False)
             mode.change(change_mode, mode, [frames, refs], queue=False)
             segmented.change(change_segmentation, [segmented, duration], [segment_group, duration], queue=False)
             check.click(check_service, outputs=service)
             demo.load(check_service, outputs=service)
-            generate.click(submit, [prompt, mode, duration, width, height, seed, steps, sampler,
-                                   scheduler, denoise, prefix, first, last, images, videos, audios,
-                                   source_audio, ref_size, segmented, segment_seconds, overlap_frames],
+            generate.click(submit, [prompt, mode, duration, width, height, seed, denoise, prefix,
+                                   first, last, images, videos, audios, source_audio, ref_size, segmented, segment_seconds, overlap_frames, resolution, aspect_ratio],
                            [task_state, task_display, status, result, downloads, request_json, timer])
             for event in (timer.tick, update.click):
                 event(refresh, [task_state, cached_id, cached_files],

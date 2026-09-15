@@ -293,6 +293,15 @@ def create_app(
                     "explicit_dimensions_override_presets": True,
                     "oversize_presets": "scale_down",
                 },
+                "generation_size": {
+                    "resolutions": ["360p", "480p", "540p", "720p", "1080p", "1440p", "2160p"],
+                    "aspect_ratios": ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"],
+                    "default_width": 1344, "default_height": 768,
+                    "default_resolution": None, "default_aspect_ratio": "16:9",
+                    "max_pixels": 1032192, "alignment": 32,
+                    "explicit_dimensions_override_presets": True,
+                    "oversize_presets": "scale_down",
+                },
                 "duration_seconds": {"min": 4, "max": 15},
                 "segmentation": {"available": True, "max_duration_seconds": 600,
                     "segment_seconds": {"min": 4, "max": 15, "default": 10},
@@ -398,6 +407,11 @@ def create_app(
                 "summary": "文生视频（默认）",
                 "value": {"mode": "t2v", "prompt": "雨夜街道，镜头缓慢向前。Audio: rain.",
                           "duration_seconds": 4, "width": 608, "height": 352, "seed": 42},
+            },
+            "portrait_t2v": {
+                "summary": "文生视频：480p 竖屏（实际 480×832）",
+                "value": {"mode": "t2v", "prompt": "雨夜街道，镜头缓慢向前。", "duration_seconds": 4,
+                          "resolution": "480p", "aspect_ratio": "9:16"},
             },
             "segmented_t2v": {
                 "summary": "文生长视频：自动重叠分段",

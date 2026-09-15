@@ -389,7 +389,6 @@ def run_case(
     index: int,
     total_cases: int,
     prompt: str,
-    steps: int,
     seed: int | None,
     output_dir: Path,
     poll_interval: float,
@@ -414,7 +413,6 @@ def run_case(
         "duration_seconds": case.duration_seconds,
         "width": case.width,
         "height": case.height,
-        "steps": steps,
     }
     if seed is not None:
         payload["seed"] = seed
@@ -636,7 +634,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="duration(s) from 4 through 15 seconds; repeat or comma-separate",
     )
     parser.add_argument("--prompt", default=DEFAULT_PROMPT)
-    parser.add_argument("--steps", type=int, default=20)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument(
         "--output-dir",
@@ -670,8 +667,6 @@ def build_parser() -> argparse.ArgumentParser:
 def _validate_options(args: argparse.Namespace) -> None:
     if not args.prompt or not args.prompt.strip():
         raise MatrixInputError("prompt must not be blank")
-    if not 1 <= args.steps <= 100:
-        raise MatrixInputError("steps must be between 1 and 100")
     if args.seed is not None and not 0 <= args.seed <= 2**63 - 1:
         raise MatrixInputError("seed must be between 0 and 2**63-1")
     if not math.isfinite(args.poll_interval) or args.poll_interval <= 0:
@@ -724,7 +719,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                     index=index,
                     total_cases=len(matrix),
                     prompt=args.prompt,
-                    steps=args.steps,
                     seed=args.seed,
                     output_dir=output_dir,
                     poll_interval=args.poll_interval,

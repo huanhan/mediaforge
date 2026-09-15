@@ -8,7 +8,7 @@ def add_edit_ui(client, refresh, cancel):
     import gradio as gr
 
     def edit_submit(prompt, source, images, start, whole, duration, audio,
-                    width, height, seed, steps, sampler, scheduler, denoise,
+                    width, height, seed, denoise,
                     prefix, ref_size, segmented=True, segment_seconds=10, overlap_frames=48,
                     resolution="source", aspect_ratio="16:9"):
         try:
@@ -23,7 +23,7 @@ def add_edit_ui(client, refresh, cancel):
                 width=None if width == 0 else width, height=None if height == 0 else height,
                 resolution=None if resolution == "source" else resolution, aspect_ratio=aspect_ratio,
                 seed=int(seed.strip()) if seed and seed.strip() else secrets.randbelow(2**63),
-                steps=steps, sampler_name=sampler, scheduler=scheduler, denoise=denoise,
+                denoise=denoise,
                 filename_prefix=(prefix or "").strip() or None, ref_image_size=ref_size,
                 segmentation=dict(enabled=segmented, segment_seconds=segment_seconds,
                                   overlap_frames=overlap_frames) if segmented else {"enabled": False})
@@ -73,11 +73,7 @@ def add_edit_ui(client, refresh, cancel):
                 height = gr.Number(value=None, minimum=0, maximum=8192, precision=0, label="编辑输出高度（留空或 0 自动）")
             gr.Markdown("尺寸优先级：自定义宽高 → 清晰度和比例 → 源视频尺寸。宽高同时留空或填 0 时使用所选档位；默认沿用源视频尺寸和比例。高档位受总像素上限 1,032,192 限制，会缩小并对齐为 32 的倍数；自定义宽高须同时填写且满足该限制。")
             seed = gr.Textbox(label="编辑随机种子", placeholder="留空随机")
-            with gr.Accordion("编辑采样与输出参数", open=False):
-                gr.Markdown("Turbo 开启时固定 4 步、Euler + simple，下方采样设置会被覆盖。")
-                steps = gr.Slider(1, 100, value=20, step=1, label="采样步数")
-                sampler = gr.Textbox(value="res_multistep", label="采样器")
-                scheduler = gr.Radio(["simple", "beta", "normal"], value="simple", label="调度器")
+            with gr.Accordion("编辑与输出参数", open=False):
                 denoise = gr.Slider(0.01, 1, value=1, step=0.01, label="去噪强度")
                 ref_size = gr.Radio(["match", "max"], value="match", label="参考图片尺寸策略")
                 prefix = gr.Textbox(label="输出文件名前缀（可选）")
@@ -98,7 +94,7 @@ def add_edit_ui(client, refresh, cancel):
     whole.change(lambda value: gr.Number(visible=not value), whole, duration, queue=False)
     segmented.change(lambda value: gr.Group(visible=value), segmented, segment_group, queue=False)
     submit.click(edit_submit, [prompt, source, images, start, whole, duration, audio,
-        width, height, seed, steps, sampler, scheduler, denoise, prefix, ref_size,
+        width, height, seed, denoise, prefix, ref_size,
         segmented, segment_seconds, overlap_frames, resolution, aspect_ratio],
         [task_state, display, status, result, downloads, request_json, timer])
     for event in (timer.tick, update.click):

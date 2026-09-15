@@ -347,7 +347,7 @@ class NativeH3Runner:
     def _sampling_options(self, plan: GenerationPlan) -> tuple[int, str, str]:
         request = plan.request
         if not self.settings.enable_acceleration_lora:
-            return request.steps, request.sampler_name, request.scheduler
+            return 20, "res_multistep", "simple"
         return (
             ACCELERATION_STEPS[request.mode],
             ACCELERATION_SAMPLER,

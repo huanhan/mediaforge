@@ -76,7 +76,7 @@ def test_video_workflow_authenticated_upload_cancel_download(tmp_path):
             body = json.loads(request.content)
             assert body["first_frame"] == "uploads/frame.png"
             assert body["seed"] == 2**63 - 1
-            assert body["steps"] == 12
+            assert not {"steps", "sampler_name", "scheduler"} & body.keys()
             return httpx.Response(202, json={"id": "task-1"})
         if request.url.path == "/v1/tasks/task-1":
             return httpx.Response(200, json={"status": "canceled" if request.method == "DELETE" else "running"})
@@ -89,7 +89,7 @@ def test_video_workflow_authenticated_upload_cancel_download(tmp_path):
     source = tmp_path / "frame.png"
     source.write_bytes(b"image")
     result, body = client.submit(dict(prompt="Test", mode="fl2v", width=608, height=352,
-                                     seed=2**63 - 1, steps=12, first_frame="pending.png"),
+                                     seed=2**63 - 1, first_frame="pending.png"),
                                  {"first_frame": str(source)})
     assert result["id"] == "task-1"
     assert client.task("task-1")["status"] == "running"
@@ -174,8 +174,7 @@ def test_submit_callback_accepts_empty_optional_textboxes(seed, prefix):
 
     demo = build_ui(VideoClient("http://test", transport=httpx.MockTransport(handle)))
     submit = next(event.fn for event in demo.fns.values() if event.fn.__name__ == "submit")
-    result = submit("Test video", "t2v", 4, 608, 352, seed, 20,
-                    "res_multistep", "simple", 1, prefix,
+    result = submit("Test video", "t2v", 4, 608, 352, seed, 1, prefix,
                     None, None, None, None, None, True, "match")
     assert result[0] == "task-empty-fields"
     assert len(requests) == 1
@@ -249,3 +248,28 @@ def test_mounted_client_uses_service_port(monkeypatch, host, expected):
     monkeypatch.setattr(ui, "build_ui", capture)
     ui.mount_ui(FastAPI(), Settings(host=host, port=8123))
     assert clients[0].base_url == f"http://{expected}:8123"
+
+
+@pytest.mark.parametrize("canvas,resolution,ratio,expected", [
+    ((None, None), "480p", "9:16", (480, 832)),
+    ((0, 0), "720p", "16:9", (1280, 704)),
+    ((None, None), "default", "9:16", (1344, 768)),
+    ((608, 352), "2160p", "1:1", (608, 352)),
+])
+def test_generation_ui_resolves_size_presets(canvas, resolution, ratio, expected):
+    import json
+    pytest.importorskip("gradio")
+    payloads = []
+    def handle(request):
+        assert request.url.path == "/v1/generations"
+        payloads.append(json.loads(request.content))
+        return httpx.Response(202, json={"id": "preset", "effective_duration_seconds": 4.4583, "frame_count": 107})
+    demo = build_ui(VideoClient("http://test", transport=httpx.MockTransport(handle)))
+    event = next(event for event in demo.fns.values() if event.fn.__name__ == "submit")
+    args = ["x", "t2v", 4, *canvas, "1", 1, None, None, None, None, None, None, True, "match",
+            False, 10, 48, resolution, ratio]
+    for index in (3, 4, -2, -1):
+        args[index] = event.inputs[index].preprocess(args[index])
+    result = event.fn(*args)
+    assert (payloads[0]["width"], payloads[0]["height"]) == expected
+    assert f"{expected[0]}×{expected[1]}" in result[2]

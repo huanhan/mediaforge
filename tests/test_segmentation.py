@@ -240,7 +240,7 @@ def test_native_sampler_passes_continuation_mask_to_core(tmp_path, monkeypatch):
     runner = NativeH3Runner(Settings(enable_acceleration_lora=False), lambda _: tmp_path)
     monkeypatch.setattr(runner, "_import_core", lambda: core)
     mask = object()
-    plan = build_plan(GenerationRequest(prompt="x", steps=2))
+    plan = build_plan(GenerationRequest(prompt="x"))
     result = runner._sample(plan, Mock(), [], {"samples": "latent", "noise_mask": mask},
                             threading.Event(), lambda _: None)
     assert result is output
