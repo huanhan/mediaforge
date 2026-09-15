@@ -4,6 +4,7 @@ import gc
 import importlib
 import importlib.util
 import math
+import logging
 import os
 import sys
 import threading
@@ -13,7 +14,7 @@ from typing import Any, Callable
 
 from .backend import OutputArtifact
 from .config import Settings
-from .memory import h3_memory_scope
+from .memory import GenerationMemoryError, h3_memory_scope
 from .media import (
     load_audio,
     load_image,
@@ -200,6 +201,7 @@ class NativeH3Runner:
             "devices": devices,
             "memory": {
                 "eager_chunk_rows": self.settings.eager_chunk_rows,
+                "mlp_chunk_rows": self.settings.mlp_chunk_rows,
                 "eager_memory_fraction": self.settings.eager_memory_fraction,
                 "mode": self.settings.vram_mode,
                 "reserve_vram_gb": self.settings.reserve_vram_gb,
@@ -559,6 +561,12 @@ class NativeH3Runner:
     ) -> None:
         core = self._import_core()
         failed = False
+        logging.getLogger(__name__).info(
+            "H3 request: mode=%s size=%sx%s frames=%s requested_seconds=%s seed=%s refs=%s/%s/%s",
+            plan.request.mode, plan.request.width, plan.request.height, plan.frame_count,
+            plan.request.duration_seconds, plan.seed, len(plan.request.reference_images),
+            len(plan.request.reference_videos), len(plan.request.reference_audios),
+        )
 
         def check_canceled() -> None:
             if cancel.is_set():
@@ -576,7 +584,8 @@ class NativeH3Runner:
                     conditioning, latent = self._build_image_conditioning(plan)
                 progress(0.2)
                 with h3_memory_scope(
-                    core.torch, core.model_management.get_torch_device(), self.settings
+                    core.torch, core.model_management.get_torch_device(), self.settings,
+                    model.model.diffusion_model, check_canceled,
                 ):
                     samples = self._sample(plan, model, conditioning, latent, cancel, progress)
                     check_canceled()
@@ -604,6 +613,13 @@ class NativeH3Runner:
                         check_canceled=check_canceled,
                     )
                     progress(0.99)
+        except core.torch.OutOfMemoryError as exc:
+            failed = True
+            raise GenerationMemoryError(
+                f"生成超出当前显存容量（{plan.request.width}×{plan.request.height}，"
+                f"{plan.frame_count} 帧）。已停止任务；请缩短视频、降低分辨率、"
+                "减少参考素材或关闭其他 GPU 程序后重试。未自动降低输出规格。"
+            ) from exc
         except Exception:
             failed = True
             raise

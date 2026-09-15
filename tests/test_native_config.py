@@ -227,3 +227,28 @@ def test_close_releases_models_and_closes_dynamic_runtime() -> None:
     core.model_management.unload_all_models.assert_called_once_with()
     core.model_management.soft_empty_cache.assert_called_once_with()
     core.aimdo_control.deinit.assert_called_once_with()
+
+
+def test_generation_oom_has_actionable_error_and_unloads_models(tmp_path: Path) -> None:
+    import threading
+    from minimaxh3_service.backend import OutputArtifact
+    from minimaxh3_service.memory import GenerationMemoryError
+    torch = pytest.importorskip("torch")
+    instance = runner(Settings(device="cpu"))
+    core = fake_core()
+    core.torch = torch
+    core.model_management.get_torch_device.return_value = torch.device("cpu")
+    instance._core = core
+    model = SimpleNamespace(model=SimpleNamespace(diffusion_model=None))
+    plan = build_plan(GenerationRequest(prompt="test", width=1248, height=704, duration_seconds=8))
+    with (
+        patch.object(instance, "_load_common_models"),
+        patch.object(instance, "_load_diffusion_model", return_value=model),
+        patch.object(instance, "_build_image_conditioning", return_value=([], {})),
+        patch.object(instance, "_sample", side_effect=torch.OutOfMemoryError("test allocation")),
+        pytest.raises(GenerationMemoryError, match="1248×704") as caught,
+    ):
+        instance.generate(plan, OutputArtifact("test.mp4", "", tmp_path / "test.mp4"), threading.Event(), lambda p: None)
+    assert isinstance(caught.value.__cause__, torch.OutOfMemoryError)
+    core.model_management.unload_all_models.assert_called_once()
+    core.model_management.soft_empty_cache.assert_called_once()

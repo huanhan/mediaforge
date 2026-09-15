@@ -33,6 +33,7 @@ class Settings:
     vram_mode: str = "dynamic"
     enable_acceleration_lora: bool = True
     eager_chunk_rows: int = 2048
+    mlp_chunk_rows: int = 0
     eager_memory_fraction: float = 0.7
 
     fl2va_model: str = "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
@@ -57,6 +58,8 @@ class Settings:
     def __post_init__(self) -> None:
         if self.eager_chunk_rows < 0:
             raise ValueError("H3_EAGER_CHUNK_ROWS must be >= 0 (0 disables the policy)")
+        if self.mlp_chunk_rows < 0:
+            raise ValueError("H3_MLP_CHUNK_ROWS must be >= 0 (0 disables MLP streaming)")
         if not 0 < self.eager_memory_fraction <= 1:
             raise ValueError("H3_EAGER_MEMORY_FRACTION must be in (0, 1]")
 
@@ -93,6 +96,7 @@ class Settings:
             reserve_vram_gb=float(os.getenv("H3_RESERVE_VRAM_GB", str(defaults.reserve_vram_gb))),
             vram_mode=os.getenv("H3_VRAM_MODE", defaults.vram_mode).lower(),
             eager_chunk_rows=int(os.getenv("H3_EAGER_CHUNK_ROWS", str(defaults.eager_chunk_rows))),
+            mlp_chunk_rows=int(os.getenv("H3_MLP_CHUNK_ROWS", str(defaults.mlp_chunk_rows))),
             eager_memory_fraction=float(os.getenv("H3_EAGER_MEMORY_FRACTION", str(defaults.eager_memory_fraction))),
             enable_acceleration_lora=_env_bool(
                 "H3_ENABLE_ACCELERATION_LORA", defaults.enable_acceleration_lora

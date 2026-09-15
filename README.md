@@ -226,7 +226,8 @@ curl.exe -X POST http://127.0.0.1:8000/v1/files -F "kind=image" -F "file=@first.
 | `H3_DEVICE` | `cuda` | 推理设备 |
 | `H3_VRAM_MODE` | `dynamic` | `dynamic`、`lowvram`、`novram`、`highvram` 或 `cpu` |
 | `H3_RESERVE_VRAM_GB` | `1.0` | 为桌面和其他程序预留的显存 |
-| `H3_EAGER_CHUNK_ROWS` | `2048` | H3 CUDA eager 回退 INT8/RMS-RoPE 分块行数；0 关闭本优化 |
+| `H3_EAGER_CHUNK_ROWS` | `2048` | H3 CUDA eager INT8/RMS-RoPE 分块行数；0 关闭整套显存优化（含 MLP 分块和预算） |
+| `H3_MLP_CHUNK_ROWS` | `0` | 默认关闭 MLP 串联分块，保留 INT8/RMS-RoPE 分块及预算；正整数开启并指定每块 token 数，省显存可设为 2048 |
 | `H3_EAGER_MEMORY_FRACTION` | `0.7` | eager INT8 为默认后端时，采样及解码阶段的 PyTorch 显存预算比例；1 不额外限制，结束后恢复原值 |
 | `H3_ENABLE_ACCELERATION_LORA` | `true` | 启用官方 Turbo acceleration LoRA 和对应 8/4-step 采样参数 |
 | `H3_FL2VA_ACCELERATION_LORA` | `minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors` | T2V/FL2V acceleration LoRA 文件名 |
@@ -295,3 +296,12 @@ uv run python examples/matrix_test.py `
 工具会先检查 `/readyz`，然后为每个任务下载并校验 MP4，最终写入 `matrix_results.csv` 和 `matrix_results.json`。分辨率必须是 32 的倍数，时长范围为 4-15 秒。可用 `--fail-fast` 在首个失败时停止，或用 `--timeout` 设置单任务超时。
 
 长视频的 eager 回退算子会产生大块临时张量；默认分块限制峰值，并保持完整时序注意力。此策略不改变帧数、分辨率或采样步数，不修改 ComfyUI/已安装算子，也不替换原生 CUDA/Triton 内核。显存比例仅约束 PyTorch 分配器，不包含全部 CUDA 分配；服务串行执行 GPU 任务，超分不使用该策略。12 GB RTX 4070 Ti 上已验证 1248×704、192 帧、4 步 Ref2V；更长视频仍需实测。
+
+显存保护还会把 H3 MLP 的 fc1→SwiGLU→fc2 串联分块，避免完整视频的 MLP 扩展中间结果常驻显存。大输出分配前检查当前分配器预算和可回收缓存，并预留 256 MiB；这是即时容量检查，并非全流程峰值保证，注意力、VAE 和其他程序占用仍可能导致 OOM。容量不足会停止任务并提示缩短时长、降低分辨率或减少参考素材，不自动更改输出规格，也不会无限重试。分块之间支持取消，任务结束恢复 MLP 方法。
+
+默认 `H3_MLP_CHUNK_ROWS=0` 使用此前 8 秒 720P 实测约 10 分 39 秒的计算方案；显存不足时可设为 `2048`，使用实测约 16 分 14 秒的省显存方案。也可尝试 `4096` 或 `8192` 减少 MLP 调用次数，但中间显存占用会上升，具体速度和容量需按设备实测。关闭 MLP 串联分块仍可能遇到大中间结果分配失败，上述耗时不代表固定速度。修改环境变量后需重启服务；`/readyz` 的 `memory.mlp_chunk_rows` 可确认生效值。例如在同一 PowerShell 窗口中关闭 MLP 分块并启动：
+
+```powershell
+$env:H3_MLP_CHUNK_ROWS="0"
+.venv/Scripts/python.exe main.py
+```
