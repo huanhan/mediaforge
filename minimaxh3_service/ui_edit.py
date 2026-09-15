@@ -18,7 +18,8 @@ def add_edit_ui(client, refresh, cancel):
                 interval["duration_seconds"] = duration
             parameters = dict(prompt=prompt, source_video=interval,
                 reference_images=["pending.png"] * len(images or []), audio_mode=audio,
-                width=width, height=height,
+                # Gradio's numeric input can serialize a cleared field as zero.
+                width=None if width == 0 else width, height=None if height == 0 else height,
                 seed=int(seed.strip()) if seed and seed.strip() else secrets.randbelow(2**63),
                 steps=steps, sampler_name=sampler, scheduler=scheduler, denoise=denoise,
                 filename_prefix=(prefix or "").strip() or None, ref_image_size=ref_size,
@@ -56,9 +57,9 @@ def add_edit_ui(client, refresh, cancel):
                 overlap_frames = gr.Slider(5, 345, value=48, step=1, label="重叠帧数（24 FPS）")
                 gr.Markdown("默认实际重叠 39 帧（1.625 秒），自动续接并合并为一个视频；最长 600 秒。")
             with gr.Row():
-                width = gr.Number(value=None, minimum=32, maximum=8192, precision=0, label="编辑输出宽度（留空自动）")
-                height = gr.Number(value=None, minimum=32, maximum=8192, precision=0, label="编辑输出高度（留空自动）")
-            gr.Markdown("宽高同时留空时使用源视频尺寸，超限等比例缩小并向下对齐至 32 的倍数（最小 32）。自定义时须同时填写，且总像素不超过 1,032,192。")
+                width = gr.Number(value=None, minimum=0, maximum=8192, precision=0, label="编辑输出宽度（留空或 0 自动）")
+                height = gr.Number(value=None, minimum=0, maximum=8192, precision=0, label="编辑输出高度（留空或 0 自动）")
+            gr.Markdown("宽高同时留空或填 0 时使用源视频尺寸，超限等比例缩小并向下对齐至 32 的倍数（最小 32）。自定义时须同时填写 32 的倍数，且总像素不超过 1,032,192。")
             seed = gr.Textbox(label="编辑随机种子", placeholder="留空随机")
             with gr.Accordion("编辑采样与输出参数", open=False):
                 gr.Markdown("Turbo 开启时固定 4 步、Euler + simple，下方采样设置会被覆盖。")

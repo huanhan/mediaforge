@@ -12,7 +12,7 @@ def callback(demo, name):
 
 
 @pytest.mark.parametrize("whole", [True, False])
-@pytest.mark.parametrize("canvas", [(352, 640), (None, None)])
+@pytest.mark.parametrize("canvas", [(352, 640), (None, None), (0, 0), (None, 0), (0, None)])
 def test_edit_ui_uploads_source_and_background_and_preserves_duration_omission(tmp_path, whole, canvas):
     pytest.importorskip("gradio")
     source, background = tmp_path / "source.mp4", tmp_path / "background.png"
@@ -36,12 +36,15 @@ def test_edit_ui_uploads_source_and_background_and_preserves_duration_omission(t
                                        "frame_count": 720, "segment_count": 4, "actual_overlap_frames": 39})
 
     demo = build_ui(VideoClient("http://test", transport=httpx.MockTransport(handle)))
+    event = next(event for event in demo.fns.values() if event.fn.__name__ == "edit_submit")
+    # Exercise the actual Number preprocessing which previously rejected cleared inputs.
+    processed_canvas = [component.preprocess(value) for component, value in zip(event.inputs[7:9], canvas)]
     result = callback(demo, "edit_submit")("Replace background", str(source), [str(background)],
-        2, whole, 30, "preserve_source", *canvas, "358", 20,
+        2, whole, 30, "preserve_source", *processed_canvas, "358", 20,
         "res_multistep", "simple", 1, None, "match", True, 10, 48)
     assert uploaded == ["video", "image"]
     body = submitted[0]
-    assert (body.get("width"), body.get("height")) == canvas
+    assert (body.get("width"), body.get("height")) == tuple(value or None for value in canvas)
     assert "mode" not in body
     assert "duration_seconds" not in body
     assert body["source_video"]["file_id"] == "uploads/video"
@@ -64,6 +67,19 @@ def test_old_server_is_rejected_before_upload(tmp_path):
         client.submit_edit({"prompt": "x", "source_video": {"file_id": "pending.mp4"}},
                       {"source_video": str(tmp_path / "not-uploaded.mp4")})
     assert requests == ["/v1/models"]
+
+
+@pytest.mark.parametrize("canvas", [(0, 640), (352, 0), (16, 640), (350, 640)])
+def test_edit_ui_still_rejects_invalid_custom_sizes_before_upload(canvas):
+    gr = pytest.importorskip("gradio")
+    def unexpected(request):
+        pytest.fail("invalid dimensions contacted the API")
+    demo = build_ui(VideoClient("http://test", transport=httpx.MockTransport(unexpected)))
+    event = next(event for event in demo.fns.values() if event.fn.__name__ == "edit_submit")
+    processed = [component.preprocess(value) for component, value in zip(event.inputs[7:9], canvas)]
+    with pytest.raises(gr.Error):
+        event.fn("x", "source.mp4", [], 0, True, 10, "preserve_source", *processed,
+                 "1", 20, "res_multistep", "simple", 1, None, "match")
 
 
 def test_edit_requires_source_and_validates_reference_limit_before_network():
