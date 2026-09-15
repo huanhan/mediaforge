@@ -174,9 +174,12 @@ class VideoRemovalRunner:
                 else:
                     encode(selected_masks.parent / "preview/%06d.jpg", prefix + "foreground-preview.mp4", mp4)
                 files["preview"] = results[-1].name
-                encode(selected_masks.parent / "rgba/%06d.png", prefix + "foreground-alpha.mov",
-                       ["-c:v", "prores_ks", "-profile:v", "4", "-pix_fmt", "yuva444p10le"])
-                files["alpha"] = results[-1].name
+                if request.foreground_background == "transparent":
+                    files["alpha"] = files["preview"]
+                else:
+                    encode(selected_masks.parent / "rgba/%06d.png", prefix + "foreground-alpha.mov",
+                           ["-c:v", "prores_ks", "-profile:v", "4", "-pix_fmt", "yuva444p10le"])
+                    files["alpha"] = results[-1].name
             if request.objects:
                 encode(selected_masks / "%06d.png", prefix + "mask.mp4",
                        ["-c:v", "libx264", "-crf", "0", "-pix_fmt", "yuv420p"], False)

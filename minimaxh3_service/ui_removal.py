@@ -186,7 +186,7 @@ def add_removal_ui(client):
                 foreground = gr.Video(label="分离前景（绿幕 / 自定义底色 / 透明）", interactive=False)
                 background = gr.Video(label="背景修复结果", interactive=False)
                 downloads = gr.File(label="下载分离结果（MOV / WebM / MP4 / 遮罩）", file_count="multiple", interactive=False)
-                gr.Markdown("指定颜色输出 MP4；透明模式输出带 Alpha 的 WebM，不烧录棋盘格。两种模式都额外提供透明 MOV 用于剪辑。运行中取消需服务端启用 H3_ALLOW_INTERRUPT_RUNNING。")
+                gr.Markdown("指定颜色输出 MP4，并额外提供透明 MOV 用于剪辑；透明模式每个目标仅输出一份带 Alpha 的 WebM，预览和下载共用，不烧录棋盘格。运行中取消需服务端启用 H3_ALLOW_INTERRUPT_RUNNING。")
         original, points, box = gr.State(None), gr.State([]), gr.State(None)
         selected_video = gr.State(None)
         loaded_index = gr.State(0)
