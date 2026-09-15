@@ -6,6 +6,9 @@
 
 支持：
 
+提供 [SAM 2 人物抠像与 ProPainter 背景修复](docs/VIDEO_REMOVAL.md)，
+支持 Gradio 多目标框选、`POST /v1/removals` 和单目标独立命令行。
+
 - `t2v`：文本生成带 32 kHz 立体声音频的视频
 - `fl2v`：首帧、尾帧或首尾帧生成视频
 - `ref2v`：参考图片、视频和音频生成视频，需要额外 Ref2V 权重

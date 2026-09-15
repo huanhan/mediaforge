@@ -44,6 +44,8 @@ from .models import (
     OutputFile,
     ReadinessStatus,
     SubmittedTask,
+    RemovalRequest,
+    SubmittedRemovalTask,
     SubmittedUpscaleTask,
     TaskStatus,
     UploadedFile,
@@ -59,6 +61,7 @@ OPENAPI_TAGS = [
     {"name": "files", "description": "Upload source media and download generated artifacts."},
     {"name": "generation", "description": "Submit MiniMax H3 video generation tasks."},
     {"name": "upscale", "description": "Submit SeedVR2 image or whole-video upscale tasks."},
+    {"name": "removal", "description": "Separate foregrounds with SAM 2 and repair video backgrounds with ProPainter."},
     {"name": "tasks", "description": "Query, stream, or cancel tasks from the shared GPU queue."},
 ]
 API_KEY_AUTH = APIKeyHeader(
@@ -289,6 +292,7 @@ def create_app(
                 "max_reference_videos": 3,
                 "max_reference_audios": 3,
                 "acceleration_lora": service_settings.enable_acceleration_lora,
+                "removal": readiness.get("removal", {"status": "not_ready"}),
                 "image_upscale": {
                     "available": upscale_readiness.get("status") == "ready",
                     "backend": upscale_readiness.get("backend", "seedvr2"),
@@ -469,12 +473,28 @@ def create_app(
             height=submitted.height,
         )
 
+    @router.post(
+        "/removals", response_model=SubmittedRemovalTask, status_code=202,
+        tags=["removal"], summary="Separate a video foreground or repair its background",
+        description=("Select up to 8 objects with normalized boxes and reference frame indices. "
+                     "Each object is transparent before its reference frame. Exports separate foregrounds "
+                     "and repairs the union mask once. Legacy first-frame box requests remain supported. "
+                     "One request uses one task in the shared GPU queue."),
+        operation_id="create_removal",
+        responses={415: BACKEND_ERROR_RESPONSE, 429: BACKEND_ERROR_RESPONSE, 503: BACKEND_ERROR_RESPONSE},
+    )
+    async def create_removal(request: Request, body: RemovalRequest) -> SubmittedRemovalTask:
+        submit = getattr(_backend(request), "submit_removal", None)
+        if submit is None:
+            raise HTTPException(status_code=503, detail="Video removal is not configured")
+        return await submit(body)
+
     @router.get(
         "/tasks/{task_id}",
         response_model=TaskStatus,
         tags=["tasks"],
         summary="Get task status",
-        description="Queries generation and upscale tasks through the same endpoint.",
+        description="Queries generation, upscale and removal tasks through the same endpoint.",
         operation_id="get_task",
         responses={404: NOT_FOUND_RESPONSE},
     )

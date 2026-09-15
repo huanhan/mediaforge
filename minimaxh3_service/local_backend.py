@@ -10,7 +10,8 @@ from fastapi import UploadFile
 from .backend import BackendSubmission, BackendTask, StoredAsset, UpscaleSubmission
 from .backend import BackendError
 from .config import Settings
-from .models import MAX_CANVAS_PIXELS, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, GenerationRequest, VideoEditRequest, UpscaleRequest
+from .models import MAX_CANVAS_PIXELS, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, GenerationRequest, VideoEditRequest, UpscaleRequest, RemovalRequest
+from .removal import VideoRemovalRunner
 from .native import NativeH3Runner
 from .media import video_dimensions, video_duration
 from .storage import LocalAssetStore
@@ -33,6 +34,7 @@ class LocalGenerationBackend:
         settings: Settings,
         runner: H3Runner | None = None,
         upscale_runner: UpscaleRunner | None = None,
+        removal_runner=None,
     ) -> None:
         self.settings = settings
         self.assets = LocalAssetStore(
@@ -54,6 +56,7 @@ class LocalGenerationBackend:
             upscale_runner=self.upscale_runner,
             upscale_output_factory=self.assets.upscale_output_path,
             upscale_idle_release_seconds=settings.upscale_idle_release_seconds,
+            removal_runner=removal_runner or VideoRemovalRunner(settings, self.assets.resolve_input),
         )
 
     async def start(self) -> None:
@@ -66,6 +69,7 @@ class LocalGenerationBackend:
     async def ready(self) -> dict:
         readiness = dict(self.runner.readiness())
         readiness["upscale"] = self.upscale_runner.readiness()
+        readiness["removal"] = self.tasks.removal_runner.readiness()
         return readiness
 
     async def upload(
@@ -148,6 +152,18 @@ class LocalGenerationBackend:
                 code="unsupported_upscale_media",
             )
         return await self.tasks.submit_upscale(request)
+
+    async def submit_removal(self, request: RemovalRequest):
+        readiness = self.tasks.removal_runner.readiness()
+        if not readiness.get("foreground_available") or (
+            request.output_mode != "foreground" and not readiness.get("background_available")
+        ):
+            raise BackendError("人物分离 / 背景修复模型或依赖未安装，参见 docs/VIDEO_REMOVAL.md",
+                               status_code=503, code="removal_not_ready", detail=readiness)
+        source = self.assets.resolve_input(request.file_id)
+        if source.suffix.lower() not in VIDEO_EXTENSIONS:
+            raise BackendError("removal requires an uploaded video", status_code=415, code="invalid_video")
+        return await self.tasks.submit_removal(request)
 
     async def get_task(self, task_id: str) -> BackendTask | None:
         return self.tasks.get(task_id)

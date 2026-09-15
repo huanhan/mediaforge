@@ -6,6 +6,61 @@ import pytest
 from minimaxh3_service.ui import VideoClient, build_ui
 
 
+@pytest.mark.parametrize("url,expected", [
+    ("http://127.0.0.1:8000", False), ("http://127.0.0.2:8000", False),
+    ("http://localhost:8000", False), ("http://LOCALHOST.:8000", False),
+    ("http://[::1]:8000", False), ("https://api.example.com", True),
+])
+def test_proxy_policy_only_bypasses_loopback(url, expected):
+    with VideoClient(url, transport=httpx.MockTransport(lambda r: httpx.Response(200))).connect() as client:
+        assert client.trust_env is expected
+
+
+def test_local_removal_upload_bypasses_broken_environment_proxy(monkeypatch, tmp_path):
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    received = []
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args): pass
+        def respond(self, status, body):
+            data = json.dumps(body).encode()
+            self.send_response(status)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        def do_GET(self):
+            self.respond(200, {"capabilities": {"removal": {"foreground_available": True}}})
+        def do_POST(self):
+            assert self.headers["Authorization"] == "Bearer local-secret"
+            data = self.rfile.read(int(self.headers["Content-Length"]))
+            received.append((self.path, data))
+            self.respond(201 if self.path == "/v1/files" else 202,
+                         {"file_id": "uploads/video.mp4"} if self.path == "/v1/files" else {"id": "queued"})
+
+    for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+        monkeypatch.setenv(key, "http://127.0.0.1:1")
+    for key in ("NO_PROXY", "no_proxy"):
+        monkeypatch.setenv(key, "")
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"video-payload" * 10000)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        client = VideoClient(f"http://127.0.0.1:{server.server_port}", "local-secret")
+        result = client.submit_removal(video, {"box": [0, 0, 1, 1]})
+        assert result["id"] == "queued"
+        assert [path for path, data in received] == ["/v1/files", "/v1/removals"]
+        assert b"video-payload" in received[0][1]
+        assert json.loads(received[1][1])["file_id"] == "uploads/video.mp4"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 def test_video_workflow_authenticated_upload_cancel_download(tmp_path):
     import json
 

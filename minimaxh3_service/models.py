@@ -334,6 +334,66 @@ class SubmittedTask(BaseModel):
     frame_count: int = Field(description="Number of video frames to generate.")
 
 
+class RemovalObject(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=40, pattern=r"^[\w-]+$")
+    frame_index: int = Field(default=0, ge=0, le=899)
+    box: tuple[float, float, float, float]
+
+    @field_validator("box")
+    @classmethod
+    def valid_box(cls, value):
+        x1, y1, x2, y2 = value
+        if not (0 <= x1 < x2 <= 1 and 0 <= y1 < y2 <= 1):
+            raise ValueError("box must be normalized x1,y1,x2,y2 within 0..1")
+        return value
+
+
+class RemovalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    file_id: str
+    box: tuple[float, float, float, float] | None = None
+    objects: list[RemovalObject] | None = Field(default=None, min_length=1, max_length=8)
+    output_mode: Literal["foreground", "background", "both"] = "foreground"
+    max_side: int = Field(default=1280, ge=256, le=1920)
+    repair_size: int = Field(default=640, ge=256, le=768)
+    max_frames: int = Field(default=600, ge=2, le=900)
+    dilation: int = Field(default=8, ge=0, le=40)
+
+    @field_validator("file_id")
+    @classmethod
+    def safe_file(cls, value):
+        return validate_file_id(value)
+
+    @field_validator("box")
+    @classmethod
+    def valid_box(cls, value):
+        return RemovalObject.valid_box(value) if value is not None else None
+
+    @model_validator(mode="after")
+    def valid_targets(self):
+        if (self.box is None) == (self.objects is None):
+            raise ValueError("Provide either box or objects, not both")
+        if self.objects:
+            ids = [obj.id.casefold() for obj in self.objects]
+            if len(ids) != len(set(ids)):
+                raise ValueError("Object ids must be unique (case insensitive)")
+            if any(obj.frame_index >= self.max_frames for obj in self.objects):
+                raise ValueError("Object frame_index must be smaller than max_frames")
+        return self
+
+    @property
+    def targets(self) -> list[RemovalObject]:
+        return self.objects or [RemovalObject(id="foreground", box=self.box)]
+
+
+class SubmittedRemovalTask(BaseModel):
+    id: str
+    status: Literal["queued"] = "queued"
+    queue_number: int
+
+
 class SubmittedUpscaleTask(BaseModel):
     id: str = Field(description="Task identifier used by all task endpoints.")
     status: Literal["queued"] = "queued"
@@ -354,9 +414,9 @@ class OutputFile(BaseModel):
 
 class TaskStatus(BaseModel):
     id: str = Field(description="Task identifier.")
-    kind: Literal["generation", "upscale"] | None = Field(
+    kind: Literal["generation", "upscale", "removal"] | None = Field(
         default=None,
-        description="Task type. Both types use the same status endpoints.",
+        description="Task type. All types use the same status endpoints.",
     )
     status: Literal["queued", "running", "succeeded", "failed", "canceled", "unknown"] = Field(
         description="Current task state."

@@ -506,13 +506,103 @@
         ]
       }
     },
+    "/v1/removals": {
+      "post": {
+        "tags": [
+          "removal"
+        ],
+        "summary": "Separate a video foreground or repair its background",
+        "description": "Select up to 8 objects with normalized boxes and reference frame indices. Each object is transparent before its reference frame. Exports separate foregrounds and repairs the union mask once. Legacy first-frame box requests remain supported. One request uses one task in the shared GPU queue.",
+        "operationId": "create_removal",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmittedRemovalTask"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/tasks/{task_id}": {
       "get": {
         "tags": [
           "tasks"
         ],
         "summary": "Get task status",
-        "description": "Queries generation and upscale tasks through the same endpoint.",
+        "description": "Queries generation, upscale and removal tasks through the same endpoint.",
         "operationId": "get_task",
         "security": [
           {
@@ -1312,6 +1402,146 @@
         ],
         "title": "ReferenceVideo"
       },
+      "RemovalObject": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "pattern": "^[\\w-]+$",
+            "title": "Id"
+          },
+          "frame_index": {
+            "type": "integer",
+            "maximum": 899.0,
+            "minimum": 0.0,
+            "title": "Frame Index",
+            "default": 0
+          },
+          "box": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 4,
+            "minItems": 4,
+            "title": "Box"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "box"
+        ],
+        "title": "RemovalObject"
+      },
+      "RemovalRequest": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "box": {
+            "anyOf": [
+              {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 4,
+                "minItems": 4
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Box"
+          },
+          "objects": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RemovalObject"
+                },
+                "type": "array",
+                "maxItems": 8,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objects"
+          },
+          "output_mode": {
+            "type": "string",
+            "enum": [
+              "foreground",
+              "background",
+              "both"
+            ],
+            "title": "Output Mode",
+            "default": "foreground"
+          },
+          "max_side": {
+            "type": "integer",
+            "maximum": 1920.0,
+            "minimum": 256.0,
+            "title": "Max Side",
+            "default": 1280
+          },
+          "repair_size": {
+            "type": "integer",
+            "maximum": 768.0,
+            "minimum": 256.0,
+            "title": "Repair Size",
+            "default": 640
+          },
+          "max_frames": {
+            "type": "integer",
+            "maximum": 900.0,
+            "minimum": 2.0,
+            "title": "Max Frames",
+            "default": 600
+          },
+          "dilation": {
+            "type": "integer",
+            "maximum": 40.0,
+            "minimum": 0.0,
+            "title": "Dilation",
+            "default": 8
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "file_id"
+        ],
+        "title": "RemovalRequest"
+      },
       "SegmentationOptions": {
         "properties": {
           "enabled": {
@@ -1373,6 +1603,30 @@
           "file_id"
         ],
         "title": "SourceVideo"
+      },
+      "SubmittedRemovalTask": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "const": "queued",
+            "title": "Status",
+            "default": "queued"
+          },
+          "queue_number": {
+            "type": "integer",
+            "title": "Queue Number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "queue_number"
+        ],
+        "title": "SubmittedRemovalTask"
       },
       "SubmittedTask": {
         "properties": {
@@ -1491,7 +1745,8 @@
                 "type": "string",
                 "enum": [
                   "generation",
-                  "upscale"
+                  "upscale",
+                  "removal"
                 ]
               },
               {
@@ -1499,7 +1754,7 @@
               }
             ],
             "title": "Kind",
-            "description": "Task type. Both types use the same status endpoints."
+            "description": "Task type. All types use the same status endpoints."
           },
           "status": {
             "type": "string",
@@ -1904,6 +2159,10 @@
     {
       "name": "upscale",
       "description": "Submit SeedVR2 image or whole-video upscale tasks."
+    },
+    {
+      "name": "removal",
+      "description": "Separate foregrounds with SAM 2 and repair video backgrounds with ProPainter."
     },
     {
       "name": "tasks",

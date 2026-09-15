@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import ipaddress
 import os
 import tempfile
 from pathlib import Path
@@ -10,7 +11,7 @@ from urllib.parse import quote
 
 import httpx
 
-from .models import GenerationRequest, VideoEditRequest
+from .models import GenerationRequest, VideoEditRequest, RemovalRequest
 
 
 class VideoClient:
@@ -20,8 +21,15 @@ class VideoClient:
         self.transport = transport
 
     def connect(self):
+        host = httpx.URL(self.base_url).host.rstrip(".").lower()
+        try:
+            local = ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            local = host == "localhost"
+        # Mounted Gradio calls its own API: environment proxies must not intercept it.
         return httpx.Client(base_url=self.base_url + "/", headers=self.headers,
-                            timeout=httpx.Timeout(120, connect=10), transport=self.transport)
+                            timeout=httpx.Timeout(120, connect=10), transport=self.transport,
+                            trust_env=not local)
 
     @staticmethod
     def unpack(response):
@@ -78,6 +86,20 @@ class VideoClient:
             payload = request_type.model_validate(payload).model_dump(mode="json", exclude_none=True)
             return self.unpack(client.post("v1/edits" if editing else "v1/generations", json=payload)), payload
 
+    def submit_removal(self, video, parameters):
+        if not video:
+            raise ValueError("请上传源视频。")
+        payload = RemovalRequest.model_validate({"file_id": "pending.mp4", **parameters}).model_dump(mode="json")
+        with self.connect() as client:
+            capability = self.unpack(client.get("v1/models"))["capabilities"].get("removal", {})
+            key = "foreground_available" if payload["output_mode"] == "foreground" else "background_available"
+            if not capability.get(key):
+                raise ValueError("服务尚未就绪：请安装 SAM 2 / ProPainter 依赖和权重，并重启新版服务。")
+            with Path(video).open("rb") as source:
+                payload["file_id"] = self.unpack(client.post("v1/files", data={"kind": "video"},
+                    files={"file": (Path(video).name, source)}))["file_id"]
+            return self.unpack(client.post("v1/removals", json=payload))
+
     def task(self, task_id: str, *, cancel=False):
         with self.connect() as client:
             method = client.delete if cancel else client.get
@@ -113,9 +135,12 @@ def build_ui(client: VideoClient):
             catalog = client.catalog()
             capabilities = catalog["capabilities"]
             turbo = capabilities.get("acceleration_lora", False)
+            removal = capabilities.get("removal", {})
             return ("连接成功 · 可用模式：" + " / ".join(capabilities["modes"]) +
                     (" · 视频编辑可用" if capabilities.get("edit", {}).get("available") else " · 视频编辑未就绪") +
                     (" · 支持重叠分段" if capabilities.get("segmentation", {}).get("available") else " · 分段不可用") +
+                    (" · 人物分离可用" if removal.get("foreground_available") else " · 人物分离未就绪") +
+                    (" · 背景修复可用" if removal.get("background_available") else " · 背景修复未就绪") +
                     ("\n\nTurbo 已开启：文生/首尾帧固定 Euler + simple + 8 步，参考/编辑模式固定 4 步；下方采样设置会被覆盖。"
                      if turbo else "\n\nTurbo 已关闭：使用下方采样设置。"))
         except (httpx.HTTPError, ValueError) as exc:
@@ -274,6 +299,9 @@ def build_ui(client: VideoClient):
         with gr.Tab("视频编辑"):
             from .ui_edit import add_edit_ui
             add_edit_ui(client, refresh, cancel)
+        from .ui_removal import add_removal_ui
+        with gr.Tab("人物分离 / 背景修复"):
+            add_removal_ui(client)
     return demo
 
 

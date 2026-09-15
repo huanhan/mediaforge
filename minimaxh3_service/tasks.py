@@ -16,7 +16,7 @@ from .backend import (
     TaskKind,
     UpscaleSubmission,
 )
-from .models import GenerationRequest, VideoEditRequest, UpscaleRequest
+from .models import GenerationRequest, VideoEditRequest, UpscaleRequest, RemovalRequest, SubmittedRemovalTask
 from .workflow import GenerationPlan, SegmentProgress, build_plan
 
 
@@ -63,7 +63,7 @@ class UpscaleRunner(Protocol):
 class _TaskRecord:
     task: BackendTask
     kind: TaskKind
-    payload: GenerationPlan | UpscaleRequest
+    payload: GenerationPlan | UpscaleRequest | RemovalRequest
     output: OutputArtifact
     cancel: threading.Event = field(default_factory=threading.Event)
 
@@ -80,10 +80,12 @@ class LocalTaskManager:
         upscale_runner: UpscaleRunner | None = None,
         upscale_output_factory: Callable[[str, str | None, str], OutputArtifact] | None = None,
         upscale_idle_release_seconds: float = 5.0,
+        removal_runner=None,
     ) -> None:
         self.runner = runner
         self.output_factory = output_factory
         self.upscale_runner = upscale_runner
+        self.removal_runner = removal_runner
         self.upscale_output_factory = upscale_output_factory
         self.queue: asyncio.Queue[str] = asyncio.Queue(maxsize=max_queue_size)
         self.allow_interrupt_running = allow_interrupt_running
@@ -113,6 +115,8 @@ class LocalTaskManager:
         runners = [self.runner]
         if self.upscale_runner is not None and self.upscale_runner is not self.runner:
             runners.append(self.upscale_runner)
+        if self.removal_runner is not None:
+            runners.append(self.removal_runner)
         for task_runner in runners:
             await asyncio.to_thread(task_runner.close)
 
@@ -183,6 +187,20 @@ class LocalTaskManager:
             height=request.height,
         )
 
+    async def submit_removal(self, request: RemovalRequest) -> SubmittedRemovalTask:
+        if self.removal_runner is None:
+            raise BackendError("removal is not configured", status_code=503, code="removal_not_ready")
+        self._ensure_queue_space()
+        task_id = uuid.uuid4().hex
+        number = self._queue_number()
+        self.records[task_id] = _TaskRecord(
+            task=BackendTask(id=task_id, status="queued", kind="removal", progress=0.0),
+            kind="removal", payload=request,
+            output=self.output_factory(task_id, "removal/video"),
+        )
+        await self.queue.put(task_id)
+        return SubmittedRemovalTask(id=task_id, queue_number=number)
+
     def get(self, task_id: str) -> BackendTask | None:
         record = self.records.get(task_id)
         if record is None:
@@ -234,6 +252,10 @@ class LocalTaskManager:
             return None
 
     def _runner_for(self, kind: TaskKind) -> H3Runner | UpscaleRunner:
+        if kind == "removal":
+            if self.removal_runner is None:
+                raise RuntimeError("removal is not configured")
+            return self.removal_runner
         if kind == "generation":
             return self.runner
         if self.upscale_runner is None:
@@ -256,6 +278,10 @@ class LocalTaskManager:
         return True
 
     async def _execute(self, record: _TaskRecord, progress: Callable[[float], None]) -> None:
+        if record.kind == "removal":
+            record.task.outputs = await asyncio.to_thread(
+                self.removal_runner.process, record.payload, record.output, record.cancel, progress)
+            return
         if record.kind == "generation":
             if not isinstance(record.payload, GenerationPlan):
                 raise TypeError("generation task has an invalid payload")
@@ -278,7 +304,7 @@ class LocalTaskManager:
         )
 
     async def _run(self) -> None:
-        resident_kind: Literal["generation", "upscale"] | None = None
+        resident_kind: TaskKind | None = None
         while True:
             task_id = await self._next_task(resident_kind)
             if task_id is None:
@@ -314,9 +340,13 @@ class LocalTaskManager:
                     raise GenerationCanceled("task canceled")
                 record.task.status = "succeeded"
                 record.task.progress = 1.0
-                record.task.outputs = [record.output]
+                if record.kind != "removal":
+                    record.task.outputs = [record.output]
             except GenerationCanceled:
                 record.output.path.unlink(missing_ok=True)
+                for artifact in record.task.outputs:
+                    artifact.path.unlink(missing_ok=True)
+                record.task.outputs = []
                 record.task.status = "canceled"
                 record.task.progress = None
             except Exception as exc:
