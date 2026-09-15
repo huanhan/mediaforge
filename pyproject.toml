@@ -12,6 +12,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+depth = [
+    "av>=16,<17",
+    "numpy>=1.26,<3",
+    "opencv-python>=4.11,<5",
+    "torch>=2.8,<2.9",
+    "torchvision>=0.23,<0.24",
+    "einops>=0.8,<1",
+    "easydict>=1.13,<2",
+    "tqdm>=4.67,<5",
+]
 removal = [
     "hydra-core>=1.3,<2",
     "iopath>=0.1.10,<0.2",
@@ -69,6 +79,7 @@ local = [
 minimaxh3 = "minimaxh3_service.__main__:main"
 minimaxh3-setup = "minimaxh3_service.setup_local:main"
 minimaxh3-setup-music = "minimaxh3_service.setup_music:main"
+minimaxh3-setup-depth = "minimaxh3_service.setup_depth:main"
 minimaxh3-openapi = "minimaxh3_service.export_openapi:main"
 minimaxh3-ui = "minimaxh3_service.ui:main"
 

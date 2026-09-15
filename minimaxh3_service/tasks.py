@@ -18,6 +18,7 @@ from .backend import (
 )
 from .models import GenerationRequest, VideoEditRequest, UpscaleRequest, RemovalRequest, SubmittedRemovalTask
 from .models import MusicRequest, SubmittedMusicTask
+from .models import DepthRequest, SubmittedDepthTask
 from .workflow import GenerationPlan, SegmentProgress, build_plan
 
 
@@ -64,7 +65,7 @@ class UpscaleRunner(Protocol):
 class _TaskRecord:
     task: BackendTask
     kind: TaskKind
-    payload: GenerationPlan | UpscaleRequest | RemovalRequest | MusicRequest
+    payload: GenerationPlan | UpscaleRequest | RemovalRequest | MusicRequest | DepthRequest
     output: OutputArtifact
     cancel: threading.Event = field(default_factory=threading.Event)
 
@@ -84,12 +85,14 @@ class LocalTaskManager:
         removal_runner=None,
         music_runner=None,
         music_output_factory=None,
+        depth_runner=None,
     ) -> None:
         self.runner = runner
         self.output_factory = output_factory
         self.upscale_runner = upscale_runner
         self.removal_runner = removal_runner
         self.music_runner = music_runner
+        self.depth_runner = depth_runner
         self.music_output_factory = music_output_factory
         self.upscale_output_factory = upscale_output_factory
         self.queue: asyncio.Queue[str] = asyncio.Queue(maxsize=max_queue_size)
@@ -118,6 +121,8 @@ class LocalTaskManager:
             with contextlib.suppress(Exception):
                 await asyncio.shield(self._release_task)
         runners = []
+        if self.depth_runner is not None:
+            runners.append(self.depth_runner)
         if self.music_runner is not None:
             runners.append(self.music_runner)
         runners.append(self.runner)
@@ -222,6 +227,19 @@ class LocalTaskManager:
         await self.queue.put(task_id)
         return SubmittedMusicTask(id=task_id, queue_number=number)
 
+    async def submit_depth(self, request: DepthRequest) -> SubmittedDepthTask:
+        if self.depth_runner is None:
+            raise BackendError("depth is not configured", status_code=503, code="depth_not_ready")
+        self._ensure_queue_space()
+        task_id = uuid.uuid4().hex
+        number = self._queue_number()
+        self.records[task_id] = _TaskRecord(
+            task=BackendTask(id=task_id, status="queued", kind="depth", progress=0.0),
+            kind="depth", payload=request, output=self.output_factory(task_id, "depth/video"),
+        )
+        await self.queue.put(task_id)
+        return SubmittedDepthTask(id=task_id, queue_number=number)
+
     def get(self, task_id: str) -> BackendTask | None:
         record = self.records.get(task_id)
         if record is None:
@@ -276,6 +294,8 @@ class LocalTaskManager:
             return None
 
     def _runner_for(self, kind: TaskKind) -> H3Runner | UpscaleRunner:
+        if kind == "depth":
+            return self.depth_runner
         if kind == "music":
             return self.music_runner
         if kind == "removal":
@@ -304,6 +324,10 @@ class LocalTaskManager:
         return True
 
     async def _execute(self, record: _TaskRecord, progress: Callable[[float], None]) -> None:
+        if record.kind == "depth":
+            record.task.outputs = await asyncio.to_thread(
+                self.depth_runner.process, record.payload, record.output, record.cancel, progress)
+            return
         if record.kind == "music":
             await asyncio.to_thread(self.music_runner.generate, record.payload, record.output, record.cancel, progress)
             return
@@ -369,7 +393,7 @@ class LocalTaskManager:
                     raise GenerationCanceled("task canceled")
                 record.task.status = "succeeded"
                 record.task.progress = 1.0
-                if record.kind != "removal":
+                if record.kind not in {"removal", "depth"}:
                     record.task.outputs = [record.output]
             except GenerationCanceled:
                 record.output.path.unlink(missing_ok=True)

@@ -8,10 +8,11 @@ from fastapi import UploadFile
 
 from .models import GenerationRequest, VideoEditRequest, UpscaleRequest, RemovalRequest, SubmittedRemovalTask
 from .models import MusicRequest, SubmittedMusicTask
+from .models import DepthRequest, SubmittedDepthTask
 
 
 TaskState = Literal["queued", "running", "succeeded", "failed", "canceled", "unknown"]
-TaskKind = Literal["generation", "upscale", "removal", "music"]
+TaskKind = Literal["generation", "upscale", "removal", "music", "depth"]
 
 
 class BackendError(RuntimeError):
@@ -97,6 +98,8 @@ class GenerationBackend(Protocol):
     async def submit_removal(self, request: RemovalRequest) -> SubmittedRemovalTask: ...
 
     async def submit_music(self, request: MusicRequest) -> SubmittedMusicTask: ...
+
+    async def submit_depth(self, request: DepthRequest) -> SubmittedDepthTask: ...
 
     async def get_task(self, task_id: str) -> BackendTask | None: ...
 

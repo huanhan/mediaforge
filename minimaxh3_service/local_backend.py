@@ -20,6 +20,8 @@ from .upscale import SeedVR2UpscaleRunner
 from .music import MusicRunner
 from .native_music import NativeMusicRunner
 from .models import MusicRequest, SubmittedMusicTask
+from .models import DepthRequest, SubmittedDepthTask
+from .depth import VideoDepthRunner
 
 
 def source_canvas(width: int, height: int) -> tuple[int, int]:
@@ -39,6 +41,7 @@ class LocalGenerationBackend:
         upscale_runner: UpscaleRunner | None = None,
         removal_runner=None,
         music_runner=None,
+        depth_runner=None,
     ) -> None:
         self.settings = settings
         self.assets = LocalAssetStore(
@@ -64,6 +67,7 @@ class LocalGenerationBackend:
             music_runner=music_runner or (NativeMusicRunner(settings, self.runner)
                                          if settings.music_backend == "native" else MusicRunner(settings)),
             music_output_factory=self.assets.music_output_path,
+            depth_runner=depth_runner or VideoDepthRunner(settings, self.assets.resolve_input),
         )
 
     async def start(self) -> None:
@@ -78,6 +82,7 @@ class LocalGenerationBackend:
         readiness["upscale"] = self.upscale_runner.readiness()
         readiness["removal"] = self.tasks.removal_runner.readiness()
         readiness["music"] = await asyncio.to_thread(self.tasks.music_runner.readiness)
+        readiness["depth"] = self.tasks.depth_runner.readiness()
         return readiness
 
     async def upload(
@@ -182,6 +187,16 @@ class LocalGenerationBackend:
             raise BackendError("音乐模型未就绪，请检查模型安装与配置，参见 docs/MUSIC.md",
                                status_code=503, code="music_not_ready", detail=readiness)
         return await self.tasks.submit_music(request)
+
+    async def submit_depth(self, request: DepthRequest) -> SubmittedDepthTask:
+        source = self.assets.resolve_input(request.file_id)
+        if source.suffix.lower() not in VIDEO_EXTENSIONS:
+            raise BackendError("depth requires an uploaded video", status_code=415, code="invalid_video")
+        readiness = self.tasks.depth_runner.readiness()
+        if readiness.get("status") != "ready":
+            raise BackendError("Video Depth Anything is not installed; see docs/DEPTH.md",
+                               status_code=503, code="depth_not_ready", detail=readiness)
+        return await self.tasks.submit_depth(request)
 
     async def get_task(self, task_id: str) -> BackendTask | None:
         return self.tasks.get(task_id)

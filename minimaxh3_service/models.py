@@ -362,6 +362,26 @@ class UpscaleRequest(BaseModel):
         return normalized
 
 
+class DepthRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    file_id: FileId = Field(description="Video file_id returned by POST /v1/files.")
+    input_size: Literal[252, 392, 518] = Field(default=392, description="Inference resolution; larger values need more VRAM.")
+    max_resolution: int = Field(default=768, ge=64, le=1280, description="Maximum output long edge; never upscales the source.")
+    save_raw: bool = Field(default=False, description="Also return float32 relative inverse depth as NPZ (depths, fps).")
+
+    @field_validator("file_id")
+    @classmethod
+    def file_id_is_safe(cls, value: str) -> str:
+        return validate_file_id(value)
+
+
+class SubmittedDepthTask(BaseModel):
+    id: str
+    status: Literal["queued"] = "queued"
+    queue_number: int
+
+
 class SubmittedTask(BaseModel):
     segment_count: int = 1
     actual_overlap_frames: int = 0
@@ -457,7 +477,7 @@ class OutputFile(BaseModel):
 
 class TaskStatus(BaseModel):
     id: str = Field(description="Task identifier.")
-    kind: Literal["generation", "upscale", "removal", "music"] | None = Field(
+    kind: Literal["generation", "upscale", "removal", "music", "depth"] | None = Field(
         default=None,
         description="Task type. All types use the same status endpoints.",
     )
@@ -510,6 +530,7 @@ class ReadinessStatus(BaseModel):
         default=None,
         description="SeedVR2 readiness and models_loaded state.",
     )
+    depth: dict[str, Any] | None = Field(default=None, description="Video Depth Anything installation readiness and frame limit.")
 
 
 class ModelCatalog(BaseModel):

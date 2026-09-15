@@ -36,6 +36,9 @@ class Settings:
     upscale_model_root: Path = Path("models/SEEDVR2")
     data_root: Path = Path("data")
     device: str = "cuda"
+    depth_runtime_path: Path = Path(".runtime/Video-Depth-Anything")
+    depth_model_path: Path = Path("models/depth/video_depth_anything_vits.pth")
+    depth_max_frames: int = 720
     reserve_vram_gb: float = 1.0
     vram_mode: str = "dynamic"
     enable_acceleration_lora: bool = True
@@ -63,6 +66,8 @@ class Settings:
     upscale_seed: int = 42
 
     def __post_init__(self) -> None:
+        if self.depth_max_frames < 1:
+            raise ValueError("H3_DEPTH_MAX_FRAMES must be positive")
         if self.music_backend not in {"native", "remote"}:
             raise ValueError("H3_MUSIC_BACKEND must be native or remote")
         if self.music_timeout_seconds <= 0 or not math.isfinite(self.music_timeout_seconds):
@@ -115,6 +120,9 @@ class Settings:
             ),
             data_root=Path(os.getenv("H3_DATA_DIR", str(defaults.data_root))),
             device=os.getenv("H3_DEVICE", defaults.device),
+            depth_runtime_path=Path(os.getenv("H3_DEPTH_RUNTIME_PATH", str(defaults.depth_runtime_path))),
+            depth_model_path=Path(os.getenv("H3_DEPTH_MODEL_PATH", str(defaults.depth_model_path))),
+            depth_max_frames=int(os.getenv("H3_DEPTH_MAX_FRAMES", str(defaults.depth_max_frames))),
             reserve_vram_gb=float(os.getenv("H3_RESERVE_VRAM_GB", str(defaults.reserve_vram_gb))),
             vram_mode=os.getenv("H3_VRAM_MODE", defaults.vram_mode).lower(),
             eager_chunk_rows=int(os.getenv("H3_EAGER_CHUNK_ROWS", str(defaults.eager_chunk_rows))),

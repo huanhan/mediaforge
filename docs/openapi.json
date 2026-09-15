@@ -520,6 +520,96 @@
         ]
       }
     },
+    "/v1/depths": {
+      "post": {
+        "tags": [
+          "depth"
+        ],
+        "summary": "Convert a video to relative inverse depth",
+        "description": "Uses the shared GPU queue. Returns a silent grayscale MP4 (near is bright), globally normalized across the clip, plus optional float32 NPZ. Preserves frame count and nominal FPS; variable-rate inputs become constant-rate. Poll /v1/tasks/{id} for downloads.",
+        "operationId": "create_depth",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DepthRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmittedDepthTask"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/music/generations": {
       "post": {
         "tags": [
@@ -1047,6 +1137,48 @@
         ],
         "title": "Body_upload_file"
       },
+      "DepthRequest": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "File Id",
+            "description": "Video file_id returned by POST /v1/files."
+          },
+          "input_size": {
+            "type": "integer",
+            "enum": [
+              252,
+              392,
+              518
+            ],
+            "title": "Input Size",
+            "description": "Inference resolution; larger values need more VRAM.",
+            "default": 392
+          },
+          "max_resolution": {
+            "type": "integer",
+            "maximum": 1280.0,
+            "minimum": 64.0,
+            "title": "Max Resolution",
+            "description": "Maximum output long edge; never upscales the source.",
+            "default": 768
+          },
+          "save_raw": {
+            "type": "boolean",
+            "title": "Save Raw",
+            "description": "Also return float32 relative inverse depth as NPZ (depths, fps).",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "file_id"
+        ],
+        "title": "DepthRequest"
+      },
       "ErrorDetail": {
         "properties": {
           "code": {
@@ -1470,6 +1602,19 @@
             ],
             "title": "Upscale",
             "description": "SeedVR2 readiness and models_loaded state."
+          },
+          "depth": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depth",
+            "description": "Video Depth Anything installation readiness and frame limit."
           }
         },
         "additionalProperties": true,
@@ -1732,6 +1877,30 @@
         ],
         "title": "SourceVideo"
       },
+      "SubmittedDepthTask": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "const": "queued",
+            "title": "Status",
+            "default": "queued"
+          },
+          "queue_number": {
+            "type": "integer",
+            "title": "Queue Number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "queue_number"
+        ],
+        "title": "SubmittedDepthTask"
+      },
       "SubmittedMusicTask": {
         "properties": {
           "id": {
@@ -1899,7 +2068,8 @@
                   "generation",
                   "upscale",
                   "removal",
-                  "music"
+                  "music",
+                  "depth"
                 ]
               },
               {
@@ -2328,6 +2498,10 @@
     }
   },
   "tags": [
+    {
+      "name": "depth",
+      "description": "Local temporal video depth estimation with Video Depth Anything Small."
+    },
     {
       "name": "music",
       "description": "Generate music locally with ACE-Step or through an optional self-hosted MiniMax Music 3 service."

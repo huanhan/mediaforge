@@ -31,6 +31,7 @@ from . import __version__
 from .backend import BackendError, BackendTask, GenerationBackend
 from .config import Settings
 from .local_backend import LocalGenerationBackend
+from .models import DepthRequest, SubmittedDepthTask
 from .models import (
     AUDIO_EXTENSIONS,
     MusicRequest,
@@ -58,6 +59,7 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 OPENAPI_TAGS = [
+    {"name": "depth", "description": "Local temporal video depth estimation with Video Depth Anything Small."},
     {"name": "music", "description": "Generate music locally with ACE-Step or through an optional self-hosted MiniMax Music 3 service."},
     {"name": "health", "description": "Process health and local runtime readiness."},
     {"name": "models", "description": "Installed models and generation/upscale capabilities."},
@@ -304,6 +306,9 @@ def create_app(
                 "max_reference_audios": 3,
                 "acceleration_lora": service_settings.enable_acceleration_lora,
                 "removal": readiness.get("removal", {"status": "not_ready"}),
+                "depth": {**readiness.get("depth", {"status": "not_ready"}),
+                          "available": readiness.get("depth", {}).get("status") == "ready",
+                          "endpoint": "/v1/depths"},
                 "music": {**readiness.get("music", {"status": "not_ready"}),
                           "available": readiness.get("music", {}).get("status") == "ready",
                           "endpoint": "/v1/music/generations", "format": "wav",
@@ -494,6 +499,17 @@ def create_app(
             width=submitted.width,
             height=submitted.height,
         )
+
+    @router.post("/depths", response_model=SubmittedDepthTask, status_code=202,
+                 tags=["depth"], summary="Convert a video to relative inverse depth",
+                 operation_id="create_depth",
+                 description="Uses the shared GPU queue. Returns a silent grayscale MP4 (near is bright), globally normalized across the clip, plus optional float32 NPZ. Preserves frame count and nominal FPS; variable-rate inputs become constant-rate. Poll /v1/tasks/{id} for downloads.",
+                 responses={415: BACKEND_ERROR_RESPONSE, 429: BACKEND_ERROR_RESPONSE, 503: BACKEND_ERROR_RESPONSE})
+    async def create_depth(request: Request, body: DepthRequest) -> SubmittedDepthTask:
+        submit = getattr(_backend(request), "submit_depth", None)
+        if submit is None:
+            raise HTTPException(status_code=503, detail="Video depth is not configured")
+        return await submit(body)
 
     @router.post("/music/generations", response_model=SubmittedMusicTask, status_code=202,
                  tags=["music"], summary="Generate instrumental music or a song",
