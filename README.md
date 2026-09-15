@@ -314,3 +314,5 @@ $env:H3_MLP_CHUNK_ROWS="0"
 ```
 
 Gradio `/ui/` 通过“视频生成”和“视频编辑”独立 Tab 区分功能。旧 `/v1/generations` 不再支持 `mode=edit`；编辑请求不带 `mode`，详见 [对接文档](docs/INTEGRATION.md)。
+
+视频编辑接口 `/v1/edits` 和 Gradio“视频编辑”Tab 支持清晰度和比例，优先级为显式宽高 > 清晰度与比例 > 源视频尺寸；编辑默认沿用源视频尺寸。

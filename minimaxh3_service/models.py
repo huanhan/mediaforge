@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import math
 from enum import StrEnum
 from typing import Annotated, Any, Literal
 
@@ -229,10 +230,36 @@ class GenerationRequest(VideoRequestOptions):
 
 
 class VideoEditRequest(VideoRequestOptions):
+    resolution: Literal["360p", "480p", "540p", "720p", "1080p", "1440p", "2160p"] | None = Field(
+        default=None, description="Optional output short-edge preset. Explicit width/height take priority; if neither dimensions nor resolution is supplied, use source video dimensions. High presets are scaled down to the model pixel limit.")
+    aspect_ratio: Literal["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"] = Field(
+        default="16:9", description="Width:height ratio used with resolution. Ignored when explicit dimensions are supplied or source dimensions are used.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_preset_canvas(cls, value):
+        if not isinstance(value, dict) or value.get("resolution") is None:
+            return value
+        width, height = value.get("width"), value.get("height")
+        if (width is None) != (height is None):
+            raise ValueError("width and height must be supplied together or both omitted")
+        if width is not None:
+            return value
+        resolution = value.get("resolution", "720p")
+        ratio = value.get("aspect_ratio", "16:9")
+        if resolution not in ("360p", "480p", "540p", "720p", "1080p", "1440p", "2160p") or ratio not in ("16:9", "9:16", "1:1", "4:3", "3:4", "21:9"):
+            return value  # Field validation reports unsupported presets.
+        short = int(resolution[:-1])
+        x, y = map(int, ratio.split(":"))
+        width, height = short * x / min(x, y), short * y / min(x, y)
+        scale = min(1.0, math.sqrt(MAX_CANVAS_PIXELS / (width * height)), 8192 / width, 8192 / height)
+        return {**value, "width": max(32, int(width * scale) // 32 * 32),
+                "height": max(32, int(height * scale) // 32 * 32)}
+
     width: int | None = Field(default=None, ge=32, le=8192,
-        description="Output width. Omit both dimensions (or set both to null) to use the source size, aligned to 32 and scaled down to the canvas limit.")
+        description="Explicit output width, supplied with height; overrides resolution and aspect_ratio. Without dimensions use the resolution preset, or source dimensions when resolution is omitted.")
     height: int | None = Field(default=None, ge=32, le=8192,
-        description="Output height. Supply together with width, or omit both for automatic source dimensions.")
+        description="Output height. Supply together with width, or omit both to use the resolution preset or automatic source dimensions.")
     source_video: SourceVideo = Field(description="Required source video and optional interval. Omitted interval duration uses the remainder of the source video.")
     audio_mode: Literal["generate", "preserve_source"] = "preserve_source"
 

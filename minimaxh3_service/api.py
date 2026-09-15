@@ -280,6 +280,14 @@ def create_app(
             "models": service_settings.model_names,
             "capabilities": {
                 "modes": modes,
+                "edit_size": {
+                    "resolutions": ["360p", "480p", "540p", "720p", "1080p", "1440p", "2160p"],
+                    "aspect_ratios": ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"],
+                    "default_resolution": None, "default_aspect_ratio": "16:9",
+                    "max_pixels": 1032192, "alignment": 32,
+                    "explicit_dimensions_override_presets": True,
+                    "oversize_presets": "scale_down",
+                },
                 "duration_seconds": {"min": 4, "max": 15},
                 "segmentation": {"available": True, "max_duration_seconds": 600,
                     "segment_seconds": {"min": 4, "max": 15, "default": 10},
@@ -412,6 +420,13 @@ def create_app(
     async def create_edit(
         request: Request,
         body: VideoEditRequest = Body(openapi_examples={
+            "edit_preset_size": {
+                "summary": "视频编辑：480p 竖屏（实际 480×832）",
+                "value": {"prompt": "保持人物和动作，将背景改成纯绿色。",
+                          "source_video": {"file_id": "uploads/source.mp4"},
+                          "resolution": "480p", "aspect_ratio": "9:16",
+                          "segmentation": {"enabled": True}},
+            },
             "edit_character": {
                 "summary": "视频编辑：角色替换 / 动作迁移",
                 "description": "上传源视频和角色图。未填写时长表示处理全部源视频；需要 Ref2V 权重。",

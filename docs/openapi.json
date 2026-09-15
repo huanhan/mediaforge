@@ -305,6 +305,20 @@
                 "$ref": "#/components/schemas/VideoEditRequest"
               },
               "examples": {
+                "edit_preset_size": {
+                  "summary": "视频编辑：480p 竖屏（实际 480×832）",
+                  "value": {
+                    "prompt": "保持人物和动作，将背景改成纯绿色。",
+                    "source_video": {
+                      "file_id": "uploads/source.mp4"
+                    },
+                    "resolution": "480p",
+                    "aspect_ratio": "9:16",
+                    "segmentation": {
+                      "enabled": true
+                    }
+                  }
+                },
                 "edit_character": {
                   "summary": "视频编辑：角色替换 / 动作迁移",
                   "description": "上传源视频和角色图。未填写时长表示处理全部源视频；需要 Ref2V 权重。",
@@ -2015,7 +2029,7 @@
               }
             ],
             "title": "Width",
-            "description": "Output width. Omit both dimensions (or set both to null) to use the source size, aligned to 32 and scaled down to the canvas limit."
+            "description": "Explicit output width, supplied with height; overrides resolution and aspect_ratio. Without dimensions use the resolution preset, or source dimensions when resolution is omitted."
           },
           "height": {
             "anyOf": [
@@ -2029,7 +2043,7 @@
               }
             ],
             "title": "Height",
-            "description": "Output height. Supply together with width, or omit both for automatic source dimensions."
+            "description": "Output height. Supply together with width, or omit both to use the resolution preset or automatic source dimensions."
           },
           "seed": {
             "anyOf": [
@@ -2116,6 +2130,41 @@
             ],
             "title": "Filename Prefix",
             "description": "Optional safe output path prefix relative to the output directory."
+          },
+          "resolution": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "360p",
+                  "480p",
+                  "540p",
+                  "720p",
+                  "1080p",
+                  "1440p",
+                  "2160p"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution",
+            "description": "Optional output short-edge preset. Explicit width/height take priority; if neither dimensions nor resolution is supplied, use source video dimensions. High presets are scaled down to the model pixel limit."
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16",
+              "1:1",
+              "4:3",
+              "3:4",
+              "21:9"
+            ],
+            "title": "Aspect Ratio",
+            "description": "Width:height ratio used with resolution. Ignored when explicit dimensions are supplied or source dimensions are used.",
+            "default": "16:9"
           },
           "source_video": {
             "$ref": "#/components/schemas/SourceVideo",

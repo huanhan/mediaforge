@@ -9,7 +9,8 @@ def add_edit_ui(client, refresh, cancel):
 
     def edit_submit(prompt, source, images, start, whole, duration, audio,
                     width, height, seed, steps, sampler, scheduler, denoise,
-                    prefix, ref_size, segmented=True, segment_seconds=10, overlap_frames=48):
+                    prefix, ref_size, segmented=True, segment_seconds=10, overlap_frames=48,
+                    resolution="source", aspect_ratio="16:9"):
         try:
             if not source:
                 raise ValueError("请上传源视频。")
@@ -20,6 +21,7 @@ def add_edit_ui(client, refresh, cancel):
                 reference_images=["pending.png"] * len(images or []), audio_mode=audio,
                 # Gradio's numeric input can serialize a cleared field as zero.
                 width=None if width == 0 else width, height=None if height == 0 else height,
+                resolution=None if resolution == "source" else resolution, aspect_ratio=aspect_ratio,
                 seed=int(seed.strip()) if seed and seed.strip() else secrets.randbelow(2**63),
                 steps=steps, sampler_name=sampler, scheduler=scheduler, denoise=denoise,
                 filename_prefix=(prefix or "").strip() or None, ref_image_size=ref_size,
@@ -34,6 +36,10 @@ def add_edit_ui(client, refresh, cancel):
             if segmented:
                 message += (f"\n共 {submitted.get('segment_count', 1)} 段 · "
                             f"实际重叠 {submitted.get('actual_overlap_frames', 0)} 帧")
+            if payload.get("width") is not None:
+                message += f"\n输出尺寸 {payload['width']}×{payload['height']}"
+            else:
+                message += "\n输出尺寸：按源视频自动适配"
             return task_id, task_id, message, None, [], payload, gr.Timer(active=True)
         except (httpx.HTTPError, ValueError, OSError) as exc:
             raise gr.Error(str(exc)) from exc
@@ -57,9 +63,14 @@ def add_edit_ui(client, refresh, cancel):
                 overlap_frames = gr.Slider(5, 345, value=48, step=1, label="重叠帧数（24 FPS）")
                 gr.Markdown("默认实际重叠 39 帧（1.625 秒），自动续接并合并为一个视频；最长 600 秒。")
             with gr.Row():
+                resolution = gr.Dropdown([("源视频尺寸（默认）", "source"), "360p", "480p", "540p", "720p", "1080p", "1440p", "2160p"],
+                                         value="source", label="编辑输出清晰度")
+                aspect_ratio = gr.Dropdown(["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"],
+                                           value="16:9", label="编辑画面比例（选择清晰度档位时生效）", interactive=False)
+            with gr.Row():
                 width = gr.Number(value=None, minimum=0, maximum=8192, precision=0, label="编辑输出宽度（留空或 0 自动）")
                 height = gr.Number(value=None, minimum=0, maximum=8192, precision=0, label="编辑输出高度（留空或 0 自动）")
-            gr.Markdown("宽高同时留空或填 0 时使用源视频尺寸，超限等比例缩小并向下对齐至 32 的倍数（最小 32）。自定义时须同时填写 32 的倍数，且总像素不超过 1,032,192。")
+            gr.Markdown("尺寸优先级：自定义宽高 → 清晰度和比例 → 源视频尺寸。宽高同时留空或填 0 时使用所选档位；默认沿用源视频尺寸和比例。高档位受总像素上限 1,032,192 限制，会缩小并对齐为 32 的倍数；自定义宽高须同时填写且满足该限制。")
             seed = gr.Textbox(label="编辑随机种子", placeholder="留空随机")
             with gr.Accordion("编辑采样与输出参数", open=False):
                 gr.Markdown("Turbo 开启时固定 4 步、Euler + simple，下方采样设置会被覆盖。")
@@ -82,11 +93,12 @@ def add_edit_ui(client, refresh, cancel):
                 request_json = gr.JSON()
     task_state, cached_id, cached_files = gr.State(""), gr.State(""), gr.State([])
     timer = gr.Timer(3, active=False)
+    resolution.change(lambda value: gr.Dropdown(interactive=value != "source"), resolution, aspect_ratio, queue=False)
     whole.change(lambda value: gr.Number(visible=not value), whole, duration, queue=False)
     segmented.change(lambda value: gr.Group(visible=value), segmented, segment_group, queue=False)
     submit.click(edit_submit, [prompt, source, images, start, whole, duration, audio,
         width, height, seed, steps, sampler, scheduler, denoise, prefix, ref_size,
-        segmented, segment_seconds, overlap_frames],
+        segmented, segment_seconds, overlap_frames, resolution, aspect_ratio],
         [task_state, display, status, result, downloads, request_json, timer])
     for event in (timer.tick, update.click):
         event(refresh, [task_state, cached_id, cached_files],

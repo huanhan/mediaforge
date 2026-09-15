@@ -127,3 +127,36 @@ def test_segmented_t2v_callback_keeps_edit_fields_out():
     callback(demo, "submit")("x", "t2v", 60, 608, 352, "1", 20, "res_multistep", "simple", 1,
         None, None, None, None, None, None, True, "match", segmented=True)
     assert payloads[0]["duration_seconds"] == 60 and "source_video" not in payloads[0]
+
+
+@pytest.mark.parametrize("canvas,resolution,ratio,expected", [
+    ((None, None), "source", "16:9", (None, None)),
+    ((0, 0), "480p", "9:16", (480, 832)),
+    ((None, None), "720p", "16:9", (1280, 704)),
+    ((None, 0), "1080p", "9:16", (736, 1344)),
+    ((608, 352), "2160p", "1:1", (608, 352)),
+])
+def test_edit_tab_presets_and_size_priority(tmp_path, canvas, resolution, ratio, expected):
+    pytest.importorskip("gradio")
+    video = tmp_path / "source.mp4"
+    video.write_bytes(b"source")
+    submitted = []
+    def handle(request):
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={"capabilities": {"edit": {"available": True, "endpoint": "/v1/edits"}}})
+        if request.url.path == "/v1/files":
+            return httpx.Response(201, json={"file_id": "source.mp4"})
+        assert request.url.path == "/v1/edits"
+        submitted.append(json.loads(request.content))
+        return httpx.Response(202, json={"id": "edit-size", "effective_duration_seconds": 5, "frame_count": 120})
+    demo = build_ui(VideoClient("http://test", transport=httpx.MockTransport(handle)))
+    event = next(e for e in demo.fns.values() if e.fn.__name__ == "edit_submit")
+    assert event.inputs[-2].value == "source"
+    assert event.inputs[-1].interactive is False
+    args = ["x", str(video), [], 0, True, 10, "preserve_source", *canvas,
+            "1", 20, "res_multistep", "simple", 1, None, "match", False, 10, 48, resolution, ratio]
+    for index in (7, 8, 19, 20):
+        args[index] = event.inputs[index].preprocess(args[index])
+    event.fn(*args)
+    assert (submitted[0].get("width"), submitted[0].get("height")) == expected
+    assert submitted[0].get("resolution") == (None if resolution == "source" else resolution)

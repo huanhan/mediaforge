@@ -427,3 +427,16 @@ def test_independent_edit_contract(tmp_path):
             for example in content["examples"].values():
                 model.model_validate(example["value"])
         assert "edit" not in schema["components"]["schemas"]["GenerationMode"]["enum"]
+
+
+def test_edit_size_presets_http_contract(tmp_path):
+    client, fake = make_client(tmp_path)
+    with client:
+        body = {"prompt": "x", "source_video": {"file_id": "s.mp4"},
+                "resolution": "480p", "aspect_ratio": "9:16"}
+        assert client.post("/v1/edits", json=body).status_code == 202
+        assert (fake.edit_request.width, fake.edit_request.height) == (480, 832)
+        assert client.post("/v1/edits", json={**body, "width": 608, "height": 352}).status_code == 202
+        assert (fake.edit_request.width, fake.edit_request.height) == (608, 352)
+        for extra in ({"width": 608}, {"resolution": "invalid"}, {"aspect_ratio": "invalid"}):
+            assert client.post("/v1/edits", json={**body, **extra}).status_code == 422
