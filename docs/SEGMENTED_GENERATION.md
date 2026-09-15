@@ -2,7 +2,8 @@
 
 使用现有 `POST /v1/generations`。上游上传素材后只提交一次任务；服务内部切片、
 传递上一段的重叠 latent、采样、裁掉重复画面并输出一个 MP4。无需 ComfyUI 服务或 JSON 工作流。
-重启 API 服务后生效；当前 Gradio 界面未增加这些控件，请通过 HTTP 或 Swagger 调用。
+重启 API 服务后生效。Gradio `/ui/` 已提供视频编辑与分段控件；
+上游流程和场景请求见 [对接指南](INTEGRATION.md)，字段定义见 Swagger `/docs`。
 
 ## 编辑源视频
 

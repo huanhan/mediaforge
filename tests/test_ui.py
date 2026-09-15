@@ -99,6 +99,38 @@ def test_api_errors_are_readable():
         client.catalog()
 
 
+@pytest.mark.parametrize("seed,prefix", [
+    ("42", None), (None, None), ("", ""), ("   ", "   "), ("0", " demo/video "),
+])
+def test_submit_callback_accepts_empty_optional_textboxes(seed, prefix):
+    pytest.importorskip("gradio")
+    import json
+
+    requests = []
+
+    def handle(request):
+        assert request.url.path == "/v1/generations"
+        body = json.loads(request.content)
+        requests.append(body)
+        return httpx.Response(202, json={
+            "id": "task-empty-fields", "queue_number": 1,
+            "effective_duration_seconds": 4.4583, "frame_count": 107,
+        })
+
+    demo = build_ui(VideoClient("http://test", transport=httpx.MockTransport(handle)))
+    submit = next(event.fn for event in demo.fns.values() if event.fn.__name__ == "submit")
+    result = submit("Test video", "t2v", 4, 608, 352, seed, 20,
+                    "res_multistep", "simple", 1, prefix,
+                    None, None, None, None, None, True, "match")
+    assert result[0] == "task-empty-fields"
+    assert len(requests) == 1
+    assert requests[0].get("filename_prefix") == ((prefix or "").strip() or None)
+    if seed and seed.strip():
+        assert requests[0]["seed"] == int(seed)
+    else:
+        assert 0 <= requests[0]["seed"] <= 2**63 - 1
+
+
 def test_gradio_page_and_events():
     gr = pytest.importorskip("gradio")
     from fastapi import FastAPI
