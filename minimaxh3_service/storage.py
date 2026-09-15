@@ -96,6 +96,11 @@ class LocalAssetStore:
         path = _inside(self.output_root, folder / filename, strict=False)
         return OutputArtifact(filename=filename, subfolder=subfolder, path=path)
 
+    def music_output_path(self, task_id: str) -> OutputArtifact:
+        video = self.output_path(task_id, "music/song")
+        return OutputArtifact(filename=video.path.with_suffix(".wav").name,
+                              subfolder=video.subfolder, path=video.path.with_suffix(".wav"))
+
     def upscale_output_path(
         self,
         task_id: str,

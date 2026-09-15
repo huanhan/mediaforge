@@ -225,12 +225,13 @@ class NativeH3Runner:
             "models_loaded": models_loaded,
         }
 
-    def _import_core(self) -> SimpleNamespace:
+    def _import_core(self, *, check_readiness: bool = True) -> SimpleNamespace:
         if self._core is not None:
             return self._core
-        status = self.readiness()
-        if status["status"] != "ready":
-            raise RuntimeError(f"local H3 runtime is not ready: {status}")
+        if check_readiness:
+            status = self.readiness()
+            if status["status"] != "ready":
+                raise RuntimeError(f"local H3 runtime is not ready: {status}")
 
         runtime = str(self.settings.runtime_path.expanduser().resolve())
         if runtime not in sys.path:

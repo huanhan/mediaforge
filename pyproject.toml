@@ -68,6 +68,7 @@ local = [
 [project.scripts]
 minimaxh3 = "minimaxh3_service.__main__:main"
 minimaxh3-setup = "minimaxh3_service.setup_local:main"
+minimaxh3-setup-music = "minimaxh3_service.setup_music:main"
 minimaxh3-openapi = "minimaxh3_service.export_openapi:main"
 minimaxh3-ui = "minimaxh3_service.ui:main"
 

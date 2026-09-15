@@ -86,6 +86,12 @@ class VideoClient:
             payload = request_type.model_validate(payload).model_dump(mode="json", exclude_none=True)
             return self.unpack(client.post("v1/edits" if editing else "v1/generations", json=payload)), payload
 
+    def submit_music(self, parameters):
+        from .models import MusicRequest
+        payload = MusicRequest.model_validate(parameters).model_dump(mode="json")
+        with self.connect() as client:
+            return self.unpack(client.post("v1/music/generations", json=payload))
+
     def submit_removal(self, video, parameters):
         if not video:
             raise ValueError("请上传源视频。")
@@ -299,6 +305,9 @@ def build_ui(client: VideoClient):
         with gr.Tab("视频编辑"):
             from .ui_edit import add_edit_ui
             add_edit_ui(client, refresh, cancel)
+        from .ui_music import add_music_ui
+        with gr.Tab("音乐生成"):
+            add_music_ui(client)
         from .ui_removal import add_removal_ui
         with gr.Tab("人物分离 / 背景修复"):
             add_removal_ui(client)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,6 +23,12 @@ class Settings:
     max_queue_size: int = 8
     idle_release_seconds: float = 5.0
     upscale_idle_release_seconds: float = 5.0
+    music_base_url: str = ""
+    music_backend: str = "native"
+    music_model_path: Path = Path("models/music/ace_step_v1_3.5b.safetensors")
+    music_api_key: str | None = None
+    music_model: str = "MiniMaxAI/MiniMax-Music3"
+    music_timeout_seconds: float = 1800.0
 
     runtime_path: Path = Path(".runtime/ComfyUI")
     upscale_runtime_path: Path = Path(".runtime/SeedVR2")
@@ -56,6 +63,15 @@ class Settings:
     upscale_seed: int = 42
 
     def __post_init__(self) -> None:
+        if self.music_backend not in {"native", "remote"}:
+            raise ValueError("H3_MUSIC_BACKEND must be native or remote")
+        if self.music_timeout_seconds <= 0 or not math.isfinite(self.music_timeout_seconds):
+            raise ValueError("H3_MUSIC_TIMEOUT_SECONDS must be finite and positive")
+        if self.music_base_url:
+            from urllib.parse import urlsplit
+            url = urlsplit(self.music_base_url)
+            if url.scheme not in {"http", "https"} or not url.hostname or url.username or url.password or url.query or url.fragment:
+                raise ValueError("H3_MUSIC_BASE_URL must be an HTTP(S) service URL without credentials, query or fragment")
         if self.eager_chunk_rows < 0:
             raise ValueError("H3_EAGER_CHUNK_ROWS must be >= 0 (0 disables the policy)")
         if self.mlp_chunk_rows < 0:
@@ -68,6 +84,12 @@ class Settings:
         defaults = cls()
         max_upload_mb = int(os.getenv("H3_MAX_UPLOAD_MB", "2048"))
         return cls(
+            music_backend=os.getenv("H3_MUSIC_BACKEND", defaults.music_backend),
+            music_model_path=Path(os.getenv("H3_MUSIC_MODEL_PATH", str(defaults.music_model_path))),
+            music_base_url=os.getenv("H3_MUSIC_BASE_URL", "").rstrip("/"),
+            music_api_key=os.getenv("H3_MUSIC_API_KEY") or None,
+            music_model=os.getenv("H3_MUSIC_MODEL", defaults.music_model),
+            music_timeout_seconds=float(os.getenv("H3_MUSIC_TIMEOUT_SECONDS", str(defaults.music_timeout_seconds))),
             host=os.getenv("H3_HOST", defaults.host),
             port=int(os.getenv("H3_PORT", str(defaults.port))),
             api_key=os.getenv("H3_API_KEY") or None,

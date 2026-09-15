@@ -33,6 +33,8 @@ from .config import Settings
 from .local_backend import LocalGenerationBackend
 from .models import (
     AUDIO_EXTENSIONS,
+    MusicRequest,
+    SubmittedMusicTask,
     IMAGE_EXTENSIONS,
     VIDEO_EXTENSIONS,
     ErrorResponse,
@@ -56,6 +58,7 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 OPENAPI_TAGS = [
+    {"name": "music", "description": "Generate music locally with ACE-Step or through an optional self-hosted MiniMax Music 3 service."},
     {"name": "health", "description": "Process health and local runtime readiness."},
     {"name": "models", "description": "Installed models and generation/upscale capabilities."},
     {"name": "files", "description": "Upload source media and download generated artifacts."},
@@ -301,6 +304,10 @@ def create_app(
                 "max_reference_audios": 3,
                 "acceleration_lora": service_settings.enable_acceleration_lora,
                 "removal": readiness.get("removal", {"status": "not_ready"}),
+                "music": {**readiness.get("music", {"status": "not_ready"}),
+                          "available": readiness.get("music", {}).get("status") == "ready",
+                          "endpoint": "/v1/music/generations", "format": "wav",
+                          "max_duration_seconds": readiness.get("music", {}).get("max_duration_seconds", 300)},
                 "image_upscale": {
                     "available": upscale_readiness.get("status") == "ready",
                     "backend": upscale_readiness.get("backend", "seedvr2"),
@@ -487,6 +494,16 @@ def create_app(
             width=submitted.width,
             height=submitted.height,
         )
+
+    @router.post("/music/generations", response_model=SubmittedMusicTask, status_code=202,
+                 tags=["music"], summary="Generate instrumental music or a song",
+                 operation_id="create_music_generation",
+                 description="Returns a task ID for the shared queue. Poll /v1/tasks/{id} and download the resulting WAV. Native ACE-Step supports empty lyrics for instrumental music and 10–120 seconds. Remote Music 3 requires lyrics and cannot interrupt running tasks.")
+    async def create_music_generation(request: Request, body: MusicRequest) -> SubmittedMusicTask:
+        submit = getattr(_backend(request), "submit_music", None)
+        if submit is None:
+            raise HTTPException(status_code=503, detail="Music generation is not configured")
+        return await submit(body)
 
     @router.post(
         "/removals", response_model=SubmittedRemovalTask, status_code=202,

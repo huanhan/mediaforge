@@ -6,6 +6,8 @@
 
 支持：
 
+- `music`：本机 ACE-Step 按曲风生成纯音乐或歌曲，提供试听与 WAV 下载；也可选接远程 MiniMax Music 3，见 [音乐生成说明](docs/MUSIC.md)
+
 提供 [SAM 2 人物抠像与 ProPainter 背景修复](docs/VIDEO_REMOVAL.md)，
 支持 Gradio 多目标框选、`POST /v1/removals` 和单目标独立命令行。
 

@@ -28,6 +28,20 @@ class GenerationMode(StrEnum):
     REF2V = "ref2v"
 
 
+class MusicRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    prompt: str = Field(min_length=1, max_length=10000, description="Music style, instruments, mood and vocals.")
+    lyrics: str = Field(default="", max_length=20000, description="Leave empty for native instrumental music; remote Music 3 requires lyrics.")
+    duration_seconds: int = Field(default=30, ge=10, le=300, description="Maximum duration; output may be shorter.")
+    seed: int = Field(default=7, ge=0, le=2147483647)
+
+
+class SubmittedMusicTask(BaseModel):
+    id: str
+    status: Literal["queued"] = "queued"
+    queue_number: int
+
+
 class SourceVideo(BaseModel):
     model_config = ConfigDict(extra="forbid")
     file_id: FileId
@@ -443,7 +457,7 @@ class OutputFile(BaseModel):
 
 class TaskStatus(BaseModel):
     id: str = Field(description="Task identifier.")
-    kind: Literal["generation", "upscale", "removal"] | None = Field(
+    kind: Literal["generation", "upscale", "removal", "music"] | None = Field(
         default=None,
         description="Task type. All types use the same status endpoints.",
     )

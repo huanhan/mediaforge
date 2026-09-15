@@ -520,6 +520,66 @@
         ]
       }
     },
+    "/v1/music/generations": {
+      "post": {
+        "tags": [
+          "music"
+        ],
+        "summary": "Generate instrumental music or a song",
+        "description": "Returns a task ID for the shared queue. Poll /v1/tasks/{id} and download the resulting WAV. Native ACE-Step supports empty lyrics for instrumental music and 10–120 seconds. Remote Music 3 requires lyrics and cannot interrupt running tasks.",
+        "operationId": "create_music_generation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MusicRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmittedMusicTask"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/removals": {
       "post": {
         "tags": [
@@ -1292,6 +1352,45 @@
         ],
         "title": "ModelCatalog"
       },
+      "MusicRequest": {
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Prompt",
+            "description": "Music style, instruments, mood and vocals."
+          },
+          "lyrics": {
+            "type": "string",
+            "maxLength": 20000,
+            "title": "Lyrics",
+            "description": "Leave empty for native instrumental music; remote Music 3 requires lyrics.",
+            "default": ""
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "maximum": 300.0,
+            "minimum": 10.0,
+            "title": "Duration Seconds",
+            "description": "Maximum duration; output may be shorter.",
+            "default": 30
+          },
+          "seed": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Seed",
+            "default": 7
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "title": "MusicRequest"
+      },
       "OutputFile": {
         "properties": {
           "filename": {
@@ -1633,6 +1732,30 @@
         ],
         "title": "SourceVideo"
       },
+      "SubmittedMusicTask": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "const": "queued",
+            "title": "Status",
+            "default": "queued"
+          },
+          "queue_number": {
+            "type": "integer",
+            "title": "Queue Number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "queue_number"
+        ],
+        "title": "SubmittedMusicTask"
+      },
       "SubmittedRemovalTask": {
         "properties": {
           "id": {
@@ -1775,7 +1898,8 @@
                 "enum": [
                   "generation",
                   "upscale",
-                  "removal"
+                  "removal",
+                  "music"
                 ]
               },
               {
@@ -2204,6 +2328,10 @@
     }
   },
   "tags": [
+    {
+      "name": "music",
+      "description": "Generate music locally with ACE-Step or through an optional self-hosted MiniMax Music 3 service."
+    },
     {
       "name": "health",
       "description": "Process health and local runtime readiness."

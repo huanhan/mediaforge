@@ -17,6 +17,9 @@ from .media import video_dimensions, video_duration
 from .storage import LocalAssetStore
 from .tasks import H3Runner, LocalTaskManager, UpscaleRunner
 from .upscale import SeedVR2UpscaleRunner
+from .music import MusicRunner
+from .native_music import NativeMusicRunner
+from .models import MusicRequest, SubmittedMusicTask
 
 
 def source_canvas(width: int, height: int) -> tuple[int, int]:
@@ -35,6 +38,7 @@ class LocalGenerationBackend:
         runner: H3Runner | None = None,
         upscale_runner: UpscaleRunner | None = None,
         removal_runner=None,
+        music_runner=None,
     ) -> None:
         self.settings = settings
         self.assets = LocalAssetStore(
@@ -57,6 +61,9 @@ class LocalGenerationBackend:
             upscale_output_factory=self.assets.upscale_output_path,
             upscale_idle_release_seconds=settings.upscale_idle_release_seconds,
             removal_runner=removal_runner or VideoRemovalRunner(settings, self.assets.resolve_input),
+            music_runner=music_runner or (NativeMusicRunner(settings, self.runner)
+                                         if settings.music_backend == "native" else MusicRunner(settings)),
+            music_output_factory=self.assets.music_output_path,
         )
 
     async def start(self) -> None:
@@ -70,6 +77,7 @@ class LocalGenerationBackend:
         readiness = dict(self.runner.readiness())
         readiness["upscale"] = self.upscale_runner.readiness()
         readiness["removal"] = self.tasks.removal_runner.readiness()
+        readiness["music"] = await asyncio.to_thread(self.tasks.music_runner.readiness)
         return readiness
 
     async def upload(
@@ -164,6 +172,16 @@ class LocalGenerationBackend:
         if source.suffix.lower() not in VIDEO_EXTENSIONS:
             raise BackendError("removal requires an uploaded video", status_code=415, code="invalid_video")
         return await self.tasks.submit_removal(request)
+
+    async def submit_music(self, request: MusicRequest) -> SubmittedMusicTask:
+        validate = getattr(self.tasks.music_runner, "validate_request", None)
+        if validate is not None:
+            validate(request)
+        readiness = await asyncio.to_thread(self.tasks.music_runner.readiness)
+        if readiness.get("status") != "ready":
+            raise BackendError("音乐模型未就绪，请检查模型安装与配置，参见 docs/MUSIC.md",
+                               status_code=503, code="music_not_ready", detail=readiness)
+        return await self.tasks.submit_music(request)
 
     async def get_task(self, task_id: str) -> BackendTask | None:
         return self.tasks.get(task_id)

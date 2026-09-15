@@ -17,6 +17,7 @@ from .backend import (
     UpscaleSubmission,
 )
 from .models import GenerationRequest, VideoEditRequest, UpscaleRequest, RemovalRequest, SubmittedRemovalTask
+from .models import MusicRequest, SubmittedMusicTask
 from .workflow import GenerationPlan, SegmentProgress, build_plan
 
 
@@ -63,7 +64,7 @@ class UpscaleRunner(Protocol):
 class _TaskRecord:
     task: BackendTask
     kind: TaskKind
-    payload: GenerationPlan | UpscaleRequest | RemovalRequest
+    payload: GenerationPlan | UpscaleRequest | RemovalRequest | MusicRequest
     output: OutputArtifact
     cancel: threading.Event = field(default_factory=threading.Event)
 
@@ -81,11 +82,15 @@ class LocalTaskManager:
         upscale_output_factory: Callable[[str, str | None, str], OutputArtifact] | None = None,
         upscale_idle_release_seconds: float = 5.0,
         removal_runner=None,
+        music_runner=None,
+        music_output_factory=None,
     ) -> None:
         self.runner = runner
         self.output_factory = output_factory
         self.upscale_runner = upscale_runner
         self.removal_runner = removal_runner
+        self.music_runner = music_runner
+        self.music_output_factory = music_output_factory
         self.upscale_output_factory = upscale_output_factory
         self.queue: asyncio.Queue[str] = asyncio.Queue(maxsize=max_queue_size)
         self.allow_interrupt_running = allow_interrupt_running
@@ -112,7 +117,10 @@ class LocalTaskManager:
         if self._release_task is not None:
             with contextlib.suppress(Exception):
                 await asyncio.shield(self._release_task)
-        runners = [self.runner]
+        runners = []
+        if self.music_runner is not None:
+            runners.append(self.music_runner)
+        runners.append(self.runner)
         if self.upscale_runner is not None and self.upscale_runner is not self.runner:
             runners.append(self.upscale_runner)
         if self.removal_runner is not None:
@@ -201,6 +209,19 @@ class LocalTaskManager:
         await self.queue.put(task_id)
         return SubmittedRemovalTask(id=task_id, queue_number=number)
 
+    async def submit_music(self, request: MusicRequest) -> SubmittedMusicTask:
+        if self.music_runner is None or self.music_output_factory is None:
+            raise BackendError("Music generation is not configured", status_code=503, code="music_not_ready")
+        self._ensure_queue_space()
+        task_id = uuid.uuid4().hex
+        number = self._queue_number()
+        self.records[task_id] = _TaskRecord(
+            task=BackendTask(id=task_id, status="queued", kind="music", progress=0.0),
+            kind="music", payload=request, output=self.music_output_factory(task_id),
+        )
+        await self.queue.put(task_id)
+        return SubmittedMusicTask(id=task_id, queue_number=number)
+
     def get(self, task_id: str) -> BackendTask | None:
         record = self.records.get(task_id)
         if record is None:
@@ -224,6 +245,9 @@ class LocalTaskManager:
             record.cancel.set()
             record.task.status = "canceled"
         elif record.task.status == "running":
+            if record.kind == "music" and not getattr(self.music_runner, "supports_interrupt", False):
+                raise BackendError("Running music tasks cannot be interrupted by the upstream service; queued tasks can be canceled",
+                                   status_code=409, code="task_running")
             if not self.allow_interrupt_running:
                 raise BackendError(
                     "task is already running; enable H3_ALLOW_INTERRUPT_RUNNING to cancel it",
@@ -252,6 +276,8 @@ class LocalTaskManager:
             return None
 
     def _runner_for(self, kind: TaskKind) -> H3Runner | UpscaleRunner:
+        if kind == "music":
+            return self.music_runner
         if kind == "removal":
             if self.removal_runner is None:
                 raise RuntimeError("removal is not configured")
@@ -278,6 +304,9 @@ class LocalTaskManager:
         return True
 
     async def _execute(self, record: _TaskRecord, progress: Callable[[float], None]) -> None:
+        if record.kind == "music":
+            await asyncio.to_thread(self.music_runner.generate, record.payload, record.output, record.cancel, progress)
+            return
         if record.kind == "removal":
             record.task.outputs = await asyncio.to_thread(
                 self.removal_runner.process, record.payload, record.output, record.cancel, progress)
