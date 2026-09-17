@@ -24,3 +24,8 @@ CUDA libraries are supplied by the official PyTorch wheels and remain subject
 to NVIDIA's applicable terms. NVIDIA kernel drivers are not included.
 
 Model licenses apply separately to models downloaded by the user; see MODELS.md.
+
+The optional local skeleton extractor uses DWPose ONNX weights from
+https://huggingface.co/yzd-v/DWPose. Download locations and SHA-256 checksums
+are recorded in minimaxh3_service/pose_models.json. These optional models are
+not bundled with the application. Setup and API details are in SKELETON.md.

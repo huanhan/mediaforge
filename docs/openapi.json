@@ -620,6 +620,96 @@
         ]
       }
     },
+    "/v1/poses": {
+      "post": {
+        "tags": [
+          "pose"
+        ],
+        "summary": "Extract a skeleton video",
+        "description": "Extracts a silent skeleton visualization MP4 with local DWPose. Poll /v1/tasks/{id} for the output.",
+        "operationId": "create_skeleton",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkeletonRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmittedSkeletonTask"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/music/generations": {
       "post": {
         "tags": [
@@ -1860,6 +1950,66 @@
         "type": "object",
         "title": "SegmentationOptions"
       },
+      "SkeletonRequest": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "File Id"
+          },
+          "output_fps": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 120.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Fps"
+          },
+          "start_seconds": {
+            "type": "number",
+            "maximum": 600.0,
+            "minimum": 0.0,
+            "title": "Start Seconds",
+            "default": 0
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 60.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "resolution": {
+            "type": "integer",
+            "enum": [
+              256,
+              384,
+              512,
+              576
+            ],
+            "title": "Resolution",
+            "default": 384
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "file_id"
+        ],
+        "title": "SkeletonRequest"
+      },
       "SourceVideo": {
         "properties": {
           "file_id": {
@@ -1966,6 +2116,30 @@
           "queue_number"
         ],
         "title": "SubmittedRemovalTask"
+      },
+      "SubmittedSkeletonTask": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "const": "queued",
+            "title": "Status",
+            "default": "queued"
+          },
+          "queue_number": {
+            "type": "integer",
+            "title": "Queue Number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "queue_number"
+        ],
+        "title": "SubmittedSkeletonTask"
       },
       "SubmittedTask": {
         "properties": {
@@ -2087,7 +2261,8 @@
                   "upscale",
                   "removal",
                   "music",
-                  "depth"
+                  "depth",
+                  "skeleton"
                 ]
               },
               {
@@ -2489,6 +2664,10 @@
     }
   },
   "tags": [
+    {
+      "name": "pose",
+      "description": "Local DWPose skeleton extraction."
+    },
     {
       "name": "depth",
       "description": "Local temporal video depth estimation with Video Depth Anything Small."

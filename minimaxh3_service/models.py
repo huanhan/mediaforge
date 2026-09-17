@@ -371,6 +371,27 @@ class SubmittedDepthTask(BaseModel):
     queue_number: int
 
 
+
+class SkeletonRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    file_id: FileId
+    output_fps: float | None = Field(default=None, ge=1, le=120)
+    start_seconds: float = Field(default=0, ge=0, le=600)
+    duration_seconds: float | None = Field(default=None, gt=0, le=60)
+    resolution: Literal[256, 384, 512, 576] = 384
+
+    @field_validator("file_id")
+    @classmethod
+    def file_id_is_safe(cls, value: str) -> str:
+        return validate_file_id(value)
+
+
+class SubmittedSkeletonTask(BaseModel):
+    id: str
+    status: Literal["queued"] = "queued"
+    queue_number: int
+
+
 class SubmittedTask(BaseModel):
     segment_count: int = 1
     actual_overlap_frames: int = 0
@@ -466,7 +487,7 @@ class OutputFile(BaseModel):
 
 class TaskStatus(BaseModel):
     id: str = Field(description="Task identifier.")
-    kind: Literal["generation", "upscale", "removal", "music", "depth"] | None = Field(
+    kind: Literal["generation", "upscale", "removal", "music", "depth", "skeleton"] | None = Field(
         default=None,
         description="Task type. All types use the same status endpoints.",
     )

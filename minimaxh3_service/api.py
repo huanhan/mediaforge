@@ -31,7 +31,7 @@ from . import __version__
 from .backend import BackendError, BackendTask, GenerationBackend
 from .config import Settings
 from .local_backend import LocalGenerationBackend
-from .models import DepthRequest, SubmittedDepthTask
+from .models import DepthRequest, SubmittedDepthTask, SkeletonRequest, SubmittedSkeletonTask
 from .models import (
     AUDIO_EXTENSIONS,
     MusicRequest,
@@ -59,6 +59,7 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 OPENAPI_TAGS = [
+    {"name": "pose", "description": "Local DWPose skeleton extraction."},
     {"name": "depth", "description": "Local temporal video depth estimation with Video Depth Anything Small."},
     {"name": "music", "description": "Generate music locally with ACE-Step or through an optional self-hosted MiniMax Music 3 service."},
     {"name": "health", "description": "Process health and local runtime readiness."},
@@ -314,6 +315,9 @@ def create_app(
                 "max_reference_videos": 3,
                 "max_reference_audios": 3,
                 "acceleration_lora": service_settings.enable_acceleration_lora,
+                "skeleton": {**readiness.get("skeleton", {"status": "not_ready"}),
+                             "available": readiness.get("skeleton", {}).get("status") == "ready",
+                             "endpoint": "/v1/poses", "outputs": ["skeleton"]},
                 "removal": readiness.get("removal", {"status": "not_ready"}),
                 "depth": {**readiness.get("depth", {"status": "not_ready"}),
                           "available": readiness.get("depth", {}).get("status") == "ready",
@@ -523,6 +527,17 @@ def create_app(
         submit = getattr(_backend(request), "submit_depth", None)
         if submit is None:
             raise HTTPException(status_code=503, detail="Video depth is not configured")
+        return await submit(body)
+
+    @router.post("/poses", response_model=SubmittedSkeletonTask, status_code=202,
+                 tags=["pose"], summary="Extract a skeleton video",
+                 operation_id="create_skeleton",
+                 description="Extracts a silent skeleton visualization MP4 with local DWPose. Poll /v1/tasks/{id} for the output.",
+                 responses={415: BACKEND_ERROR_RESPONSE, 429: BACKEND_ERROR_RESPONSE, 503: BACKEND_ERROR_RESPONSE})
+    async def create_skeleton(request: Request, body: SkeletonRequest) -> SubmittedSkeletonTask:
+        submit = getattr(_backend(request), "submit_skeleton", None)
+        if submit is None:
+            raise HTTPException(status_code=503, detail="Skeleton extraction is not configured")
         return await submit(body)
 
     @router.post("/music/generations", response_model=SubmittedMusicTask, status_code=202,

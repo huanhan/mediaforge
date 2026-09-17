@@ -39,6 +39,10 @@ class Settings:
     depth_runtime_path: Path = Path(".runtime/Video-Depth-Anything")
     depth_model_path: Path = Path("models/depth/video_depth_anything_vits.pth")
     depth_max_frames: int = 720
+    pose_runtime_path: Path = Path(".runtime/DWPose")
+    pose_model_path: Path = Path("models/pose")
+    pose_max_frames: int = 240
+    pose_timeout_seconds: float = 3600.0
     reserve_vram_gb: float = 1.0
     vram_mode: str = "dynamic"
     enable_acceleration_lora: bool = True
@@ -66,6 +70,10 @@ class Settings:
     upscale_seed: int = 42
 
     def __post_init__(self) -> None:
+        if self.pose_max_frames < 2:
+            raise ValueError("H3_POSE_MAX_FRAMES must be at least 2")
+        if not math.isfinite(self.pose_timeout_seconds) or self.pose_timeout_seconds <= 0:
+            raise ValueError("H3_POSE_TIMEOUT_SECONDS must be finite and positive")
         if self.depth_max_frames < 1:
             raise ValueError("H3_DEPTH_MAX_FRAMES must be positive")
         if self.music_backend not in {"native", "remote"}:
@@ -89,6 +97,10 @@ class Settings:
         defaults = cls()
         max_upload_mb = int(os.getenv("H3_MAX_UPLOAD_MB", "2048"))
         return cls(
+            pose_runtime_path=Path(os.getenv("H3_POSE_RUNTIME_PATH", str(defaults.pose_runtime_path))),
+            pose_model_path=Path(os.getenv("H3_POSE_MODEL_PATH", str(defaults.pose_model_path))),
+            pose_max_frames=int(os.getenv("H3_POSE_MAX_FRAMES", str(defaults.pose_max_frames))),
+            pose_timeout_seconds=float(os.getenv("H3_POSE_TIMEOUT_SECONDS", str(defaults.pose_timeout_seconds))),
             music_backend=os.getenv("H3_MUSIC_BACKEND", defaults.music_backend),
             music_model_path=Path(os.getenv("H3_MUSIC_MODEL_PATH", str(defaults.music_model_path))),
             music_base_url=os.getenv("H3_MUSIC_BASE_URL", "").rstrip("/"),

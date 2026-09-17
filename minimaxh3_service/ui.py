@@ -106,6 +106,22 @@ class VideoClient:
                     files={"file": (Path(video).name, source)}))["file_id"]
             return self.unpack(client.post("v1/removals", json=payload))
 
+    def submit_skeleton(self, video, parameters=None):
+        if not video:
+            raise ValueError("请上传源视频。")
+        parameters = dict(parameters or {})
+        with self.connect() as client:
+            capabilities = self.unpack(client.get("v1/models"))["capabilities"].get("skeleton", {})
+            if not capabilities.get("available"):
+                raise ValueError("本地 DWPose 未就绪，请运行 python -m minimaxh3_service.setup_pose 后重启服务。")
+            def upload(path, kind):
+                with Path(path).open("rb") as source:
+                    return self.unpack(client.post("v1/files", data={"kind": kind},
+                        files={"file": (Path(path).name, source)}))["file_id"]
+            payload = {"file_id": upload(video, "video"), **parameters}
+            response = self.unpack(client.post("v1/poses", json=payload))
+            return response, payload
+
     def task(self, task_id: str, *, cancel=False):
         with self.connect() as client:
             method = client.delete if cancel else client.get
@@ -234,6 +250,48 @@ def build_ui(client: VideoClient):
         except (httpx.HTTPError, ValueError) as exc:
             raise gr.Error(str(exc)) from exc
 
+    def submit_pose(video, fps, start, duration, resolution, seed):
+        try:
+            parameters = {"resolution": int(resolution),
+                          "start_seconds": float(start or 0)}
+            if fps not in (None, 0):
+                parameters["output_fps"] = float(fps)
+            if duration not in (None, 0):
+                parameters["duration_seconds"] = float(duration)
+            # Skeleton extraction is deterministic; the former migration seed
+            # is intentionally not sent to /v1/poses.
+            submitted, payload = client.submit_skeleton(video, parameters=parameters)
+            task_id = submitted["id"]
+            return (task_id, task_id,
+                    f"已提交 · {task_id} · 队列位置 {submitted.get('queue_number', '未知')}",
+                    None, None, [], payload, gr.Timer(active=True))
+        except (httpx.HTTPError, ValueError, OSError) as exc:
+            raise gr.Error(str(exc)) from exc
+
+    def refresh_pose(task_id, cached_id, cached_files):
+        if not task_id:
+            return (gr.skip(),) * 7
+        try:
+            task = client.task(task_id)
+            labels = dict(queued="排队中", running="生成中", succeeded="已完成",
+                          failed="生成失败", canceled="已取消", unknown="任务状态未知")
+            message = f"{labels.get(task['status'], task['status'])} · {task_id}"
+            if task.get("progress") is not None:
+                message += f" · {task['progress']:.0%}"
+            if task.get("error"):
+                message += "\n" + json.dumps(task["error"], ensure_ascii=False)
+            files = cached_files if cached_id == task_id else []
+            if task["status"] == "succeeded" and not files:
+                files = client.download(task.get("outputs", []))
+            videos = [path for path in files if Path(path).suffix.lower() in
+                      {".mp4", ".webm", ".mov", ".mkv"}]
+            return (message, videos[0] if len(videos) > 0 else gr.skip(),
+                    videos[1] if len(videos) > 1 else gr.skip(), files, task_id, files,
+                    gr.Timer(active=task["status"] in {"queued", "running"}))
+        except (httpx.HTTPError, ValueError, OSError) as exc:
+            return (f"查询失败，可点击刷新重试：{exc}", gr.skip(), gr.skip(), gr.skip(),
+                    gr.skip(), gr.skip(), gr.Timer(active=False))
+
     def change_mode(value):
         return gr.Group(visible=value == "fl2v"), gr.Group(visible=value == "ref2v")
 
@@ -310,6 +368,44 @@ def build_ui(client: VideoClient):
                       [status, result, downloads, cached_id, cached_files, timer],
                       concurrency_id="task-refresh", concurrency_limit=1)
             stop.click(cancel, task_state, status)
+        with gr.Tab("姿态迁移（本地模型）"):
+            gr.Markdown("上传视频，服务端使用本地 DWPose 提取人体关键点并输出骨骼可视化视频。")
+            with gr.Row():
+                pose_video = gr.Video(label="源人物视频")
+            with gr.Row():
+                # Gradio Number preprocesses an empty value as 0; the submitter
+                # treats 0 as omitted and preserves the source video's FPS.
+                pose_fps = gr.Number(value=0, minimum=0, maximum=120, label="输出 FPS（0 使用源 FPS）")
+                pose_start = gr.Number(value=0, minimum=0, maximum=600, label="开始秒数")
+                pose_duration = gr.Number(value=0, minimum=0, maximum=60, label="时长（秒，0 使用原视频剩余时长）")
+            with gr.Row():
+                pose_resolution = gr.Dropdown([256, 384, 512, 576], value=384, label="短边分辨率")
+                pose_seed = gr.Number(value=42, precision=0, minimum=0, label="随机种子（已移除）", visible=False)
+            with gr.Row():
+                pose_submit = gr.Button("开始姿态迁移", variant="primary")
+                pose_update = gr.Button("刷新进度")
+                pose_stop = gr.Button("取消任务")
+            pose_status = gr.Textbox(label="任务状态", lines=3, interactive=False)
+            pose_task = gr.Textbox(label="任务 ID", interactive=False)
+            with gr.Row():
+                pose_skeleton = gr.Video(label="骨骼视频", interactive=False)
+                pose_result = gr.Video(label="角色视频（已移除）", interactive=False, visible=False)
+            pose_downloads = gr.File(label="下载两个结果", file_count="multiple", interactive=False)
+            pose_request = gr.JSON(label="本次请求参数")
+            pose_state = gr.State("")
+            pose_cached_id = gr.State("")
+            pose_cached_files = gr.State([])
+            pose_timer = gr.Timer(3, active=False)
+            pose_submit.click(submit_pose, [pose_video, pose_fps, pose_start, pose_duration,
+                                            pose_resolution, pose_seed],
+                              [pose_state, pose_task, pose_status, pose_skeleton, pose_result,
+                               pose_downloads, pose_request, pose_timer])
+            for event in (pose_timer.tick, pose_update.click):
+                event(refresh_pose, [pose_state, pose_cached_id, pose_cached_files],
+                      [pose_status, pose_skeleton, pose_result, pose_downloads,
+                       pose_cached_id, pose_cached_files, pose_timer],
+                      concurrency_id="pose-task-refresh", concurrency_limit=1)
+            pose_stop.click(cancel, pose_state, pose_status)
         with gr.Tab("视频编辑"):
             from .ui_edit import add_edit_ui
             add_edit_ui(client, refresh, cancel)

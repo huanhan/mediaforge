@@ -7,6 +7,7 @@
 支持：
 
 - `POST /v1/depths`：本地 Video Depth Anything Small 视频转深度，输出灰度 MP4 和可选 float32 NPZ，见 [安装与接口说明](docs/DEPTH.md)
+- `POST /v1/poses`：本地 DWPose 视频骨骼提取，只输出骨骼可视化 MP4，见 [安装与接口说明](docs/SKELETON.md)
 - `music`：本机 ACE-Step 按曲风生成纯音乐或歌曲，提供试听与 WAV 下载；也可选接远程 MiniMax Music 3，见 [音乐生成说明](docs/MUSIC.md)
 
 提供 [SAM 2 人物抠像与 ProPainter 背景修复](docs/VIDEO_REMOVAL.md)，
