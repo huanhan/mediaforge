@@ -1,7 +1,10 @@
 """Music creation, task status, audio preview and download controls."""
+import json
+from pathlib import Path
+
 import httpx
 
-from .models import MUSIC_MAX_DURATION_SECONDS
+from .models import MUSIC_MAX_DURATION_SECONDS, MusicRequest
 
 
 def add_music_ui(client):
@@ -20,16 +23,18 @@ def add_music_ui(client):
 
     def submit(prompt, lyrics, duration, seed, cot, abc, cfg_scale):
         try:
-            result = client.submit_music(dict(prompt=prompt, lyrics=lyrics,
-                                               duration_seconds=duration, seed=seed,
-                                               cot=cot, abc=abc.strip() or None, cfg_scale=cfg_scale))
-            return result["id"], f"已排队 · 队列位置 {result['queue_number']}", None, None, "", gr.Timer(active=True)
+            payload = MusicRequest.model_validate(dict(prompt=prompt, lyrics=lyrics,
+                duration_seconds=duration, seed=seed, cot=cot,
+                abc=(abc or "").strip() or None, cfg_scale=cfg_scale)).model_dump(mode="json")
+            result = client.submit_music(payload)
+            return (result["id"], f"已排队 · 队列位置 {result['queue_number']} · {result['id']}",
+                    None, None, {}, payload, gr.Timer(active=True))
         except (ValueError, httpx.HTTPError) as exc:
             raise gr.Error(str(exc)) from exc
 
     def refresh(task_id, cached):
         if not task_id:
-            return (gr.skip(),) * 5
+            return (gr.skip(),) * 6
         try:
             task = client.task(task_id)
             state = task["status"]
@@ -37,15 +42,27 @@ def add_music_ui(client):
             message = labels.get(state, state)
             if task.get("error"):
                 message += f"：{task['error']}"
-            path = cached
+            message += f" · {task_id}"
+            # A late refresh or an older browser session can supply another
+            # task's cache. A path alone is never evidence that this task was downloaded.
+            cache = cached if isinstance(cached, dict) and cached.get("task_id") == task_id else {}
+            path = cache.get("path")
             if state == "succeeded" and not path:
-                files = client.download([item for item in task.get("outputs", []) if item["filename"].endswith(".wav")])
-                if not files:
+                files = client.download([item for item in task.get("outputs", [])
+                                         if item["filename"].endswith((".wav", ".json"))])
+                path = next((item for item in files if Path(item).suffix == ".wav"), None)
+                if not path:
                     raise ValueError("任务完成但没有音频文件")
-                path = files[0]
-            return message, path or None, path or None, path, gr.Timer(active=state in {"queued", "running"})
+                metadata_path = next((item for item in files if Path(item).suffix == ".json"), None)
+                metadata = json.loads(Path(metadata_path).read_text(encoding="utf-8")) if metadata_path else {}
+                cache = dict(task_id=task_id, path=path, request=metadata.get("request"))
+            parameters = cache.get("request")
+            return (message, path or None, path or None, cache,
+                    parameters if isinstance(parameters, dict) else gr.skip(),
+                    gr.Timer(active=state in {"queued", "running"}))
         except (ValueError, OSError, httpx.HTTPError) as exc:
-            return f"查询失败，可刷新重试：{exc}", gr.skip(), gr.skip(), gr.skip(), gr.Timer(active=False)
+            return (f"查询失败，可刷新重试：{exc}", gr.skip(), gr.skip(),
+                    gr.skip(), gr.skip(), gr.Timer(active=False))
 
     def cancel(task_id):
         if not task_id:
@@ -61,7 +78,9 @@ def add_music_ui(client):
     gr.Button("检查音乐服务").click(check, outputs=service)
     with gr.Row():
         with gr.Column():
-            prompt = gr.Textbox(label="曲风描述（推荐英文）", lines=3, value="Mandarin, warm piano pop, expressive female voice, acoustic piano, rounded bass and light drums, 88 BPM")
+            prompt = gr.Textbox(label="曲风与人声描述", lines=3,
+                                info="支持中文描述；曲风和男／女声是生成目标，模型不保证遵从。避免同时写入相互矛盾的人声要求。",
+                                value="Mandarin pop, acoustic piano, rounded bass and light drums, 88 BPM")
             lyrics = gr.Textbox(label="歌词（留空请求纯音乐）", lines=10, value="[Verse]\n清晨的风轻轻吹过\n街角传来熟悉的歌\n[Chorus]\n让阳光照亮每个梦\n和你走过春夏秋冬")
             duration = gr.Slider(10, MUSIC_MAX_DURATION_SECONDS, value=30, step=1, label="最长时长（秒）")
             seed = gr.Number(value=7, minimum=0, maximum=2147483647, precision=0, label="随机种子")
@@ -74,14 +93,18 @@ def add_music_ui(client):
             status = gr.Markdown("等待提交")
             audio = gr.Audio(label="音乐试听", type="filepath", interactive=False)
             download = gr.File(label="下载 WAV", interactive=False)
+            with gr.Accordion("本次生成参数", open=False):
+                parameters = gr.JSON(label="提交参数；完成后读取生成记录")
             with gr.Row():
                 update = gr.Button("刷新状态")
                 stop = gr.Button("取消任务")
     task = gr.State("")
-    cached = gr.State("")
+    cached = gr.State({})
     timer = gr.Timer(3, active=False)
-    start.click(submit, [prompt, lyrics, duration, seed, cot, abc, cfg_scale], [task, status, audio, download, cached, timer])
+    start.click(submit, [prompt, lyrics, duration, seed, cot, abc, cfg_scale],
+                [task, status, audio, download, cached, parameters, timer],
+                concurrency_id="music-task", concurrency_limit=1)
     for event in (timer.tick, update.click):
-        event(refresh, [task, cached], [status, audio, download, cached, timer],
-              concurrency_id="music-refresh", concurrency_limit=1)
+        event(refresh, [task, cached], [status, audio, download, cached, parameters, timer],
+              concurrency_id="music-task", concurrency_limit=1)
     stop.click(cancel, task, status)
