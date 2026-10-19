@@ -11,6 +11,7 @@ import time
 import wave
 
 from .backend import OutputArtifact
+from .models import MUSIC_MAX_DURATION_SECONDS
 from .setup_music import MODEL_ID, VAE_ID, missing_model_files
 from .tasks import GenerationCanceled
 
@@ -44,7 +45,7 @@ class MusicRunner:
             missing.append("YuE2 Python environment: run python -m minimaxh3_service.setup_music")
         result = dict(status="not_ready", backend="yue2", model=MODEL_ID, vae=VAE_ID,
                       models_loaded=False, instrumental=True, lyrics=True, sample_rate=48000,
-                      max_duration_seconds=300, supports_interrupt=True,
+                      max_duration_seconds=MUSIC_MAX_DURATION_SECONDS, supports_interrupt=True,
                       device=self.settings.music_device, missing=missing)
         if missing:
             return result

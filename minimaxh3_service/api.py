@@ -36,6 +36,7 @@ from .models import BeatAnalysisRequest, SubmittedBeatAnalysisTask
 from .models import TranscriptionRequest, SubmittedTranscriptionTask, AlignmentRequest
 from .models import (
     AUDIO_EXTENSIONS,
+    MUSIC_MAX_DURATION_SECONDS,
     MusicRequest,
     SubmittedMusicTask,
     IMAGE_EXTENSIONS,
@@ -338,7 +339,7 @@ def create_app(
                 "music": {**readiness.get("music", {"status": "not_ready"}),
                           "available": readiness.get("music", {}).get("status") == "ready",
                           "endpoint": "/v1/music/generations", "format": "wav",
-                          "max_duration_seconds": readiness.get("music", {}).get("max_duration_seconds", 300)},
+                          "max_duration_seconds": readiness.get("music", {}).get("max_duration_seconds", MUSIC_MAX_DURATION_SECONDS)},
                 "image_upscale": {
                     "available": upscale_readiness.get("status") == "ready",
                     "backend": upscale_readiness.get("backend", "seedvr2"),
@@ -589,7 +590,7 @@ def create_app(
                  tags=["music"], summary="Generate instrumental music or a song with YuE2",
                  operation_id="create_music_generation",
                  responses={429: BACKEND_ERROR_RESPONSE, 503: BACKEND_ERROR_RESPONSE},
-                 description="Returns a task ID for the shared GPU queue. Poll /v1/tasks/{id} for progress and download 48 kHz stereo PCM WAV, generation metadata JSON and an ABC score when planned. duration_seconds is a 10–300 second upper bound and can truncate a phrase; inspect metadata.truncated. Empty lyrics request instrumental music. cot controls symbolic planning. Running tasks can be canceled when H3_ALLOW_INTERRUPT_RUNNING=true.")
+                 description=f"Returns a task ID for the shared GPU queue. Poll /v1/tasks/{{id}} for progress and download 48 kHz stereo PCM WAV, generation metadata JSON and an ABC score when planned. duration_seconds is a 10–{MUSIC_MAX_DURATION_SECONDS} second upper bound and can truncate a phrase; inspect metadata.truncated. Empty lyrics request instrumental music. cot controls symbolic planning. Running tasks can be canceled when H3_ALLOW_INTERRUPT_RUNNING=true.")
     async def create_music_generation(request: Request, body: MusicRequest) -> SubmittedMusicTask:
         submit = getattr(_backend(request), "submit_music", None)
         if submit is None:

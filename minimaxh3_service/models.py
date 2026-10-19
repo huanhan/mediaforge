@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_vali
 
 
 MAX_CANVAS_PIXELS = 768 * 1344
+MUSIC_MAX_DURATION_SECONDS = 500
 IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"})
 VIDEO_EXTENSIONS = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"})
 AUDIO_EXTENSIONS = frozenset({".wav", ".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus"})
@@ -32,7 +33,7 @@ class MusicRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     prompt: str = Field(min_length=1, max_length=10000, description="Music style, instruments, mood and vocals.")
     lyrics: str = Field(default="", max_length=20000, description="Lyrics with [Verse]/[Chorus] sections. Empty lyrics request instrumental music; absence of vocals is not guaranteed.")
-    duration_seconds: int = Field(default=30, ge=10, le=300, description="Maximum output duration, enforced by the semantic token budget and audio cropping; may truncate a musical phrase.")
+    duration_seconds: int = Field(default=30, ge=10, le=MUSIC_MAX_DURATION_SECONDS, description="Maximum output duration, enforced by the semantic token budget and audio cropping; may truncate a musical phrase.")
     seed: int = Field(default=7, ge=0, le=2147483647)
     cot: Literal["full", "melody", "off"] = Field(default="full", description="YuE2 symbolic planning: melody and chords, melody only, or direct generation.")
     abc: str | None = Field(default=None, min_length=1, max_length=50000, description="Optional YuE2-compatible ABC score; requires cot=full or melody.")

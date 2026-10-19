@@ -1,6 +1,8 @@
 """Music creation, task status, audio preview and download controls."""
 import httpx
 
+from .models import MUSIC_MAX_DURATION_SECONDS
+
 
 def add_music_ui(client):
     import gradio as gr
@@ -61,7 +63,7 @@ def add_music_ui(client):
         with gr.Column():
             prompt = gr.Textbox(label="曲风描述（推荐英文）", lines=3, value="Mandarin, warm piano pop, expressive female voice, acoustic piano, rounded bass and light drums, 88 BPM")
             lyrics = gr.Textbox(label="歌词（留空请求纯音乐）", lines=10, value="[Verse]\n清晨的风轻轻吹过\n街角传来熟悉的歌\n[Chorus]\n让阳光照亮每个梦\n和你走过春夏秋冬")
-            duration = gr.Slider(10, 300, value=30, step=1, label="最长时长（秒）")
+            duration = gr.Slider(10, MUSIC_MAX_DURATION_SECONDS, value=30, step=1, label="最长时长（秒）")
             seed = gr.Number(value=7, minimum=0, maximum=2147483647, precision=0, label="随机种子")
             with gr.Accordion("乐谱与引导设置", open=False):
                 cot = gr.Dropdown(["full", "melody", "off"], value="full", label="乐谱规划（full：旋律和和弦，melody：旋律，off：关闭）")

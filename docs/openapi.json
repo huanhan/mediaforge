@@ -926,7 +926,7 @@
           "music"
         ],
         "summary": "Generate instrumental music or a song with YuE2",
-        "description": "Returns a task ID for the shared GPU queue. Poll /v1/tasks/{id} for progress and download 48 kHz stereo PCM WAV, generation metadata JSON and an ABC score when planned. duration_seconds is a 10–300 second upper bound and can truncate a phrase; inspect metadata.truncated. Empty lyrics request instrumental music. cot controls symbolic planning. Running tasks can be canceled when H3_ALLOW_INTERRUPT_RUNNING=true.",
+        "description": "Returns a task ID for the shared GPU queue. Poll /v1/tasks/{id} for progress and download 48 kHz stereo PCM WAV, generation metadata JSON and an ABC score when planned. duration_seconds is a 10–500 second upper bound and can truncate a phrase; inspect metadata.truncated. Empty lyrics request instrumental music. cot controls symbolic planning. Running tasks can be canceled when H3_ALLOW_INTERRUPT_RUNNING=true.",
         "operationId": "create_music_generation",
         "requestBody": {
           "content": {
@@ -1904,7 +1904,7 @@
           },
           "duration_seconds": {
             "type": "integer",
-            "maximum": 300.0,
+            "maximum": 500.0,
             "minimum": 10.0,
             "title": "Duration Seconds",
             "description": "Maximum output duration, enforced by the semantic token budget and audio cropping; may truncate a musical phrase.",

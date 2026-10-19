@@ -138,7 +138,7 @@ def test_running_worker_is_reaped(music, monkeypatch, mode):
 
 
 @pytest.mark.parametrize("update", [
-    {"prompt": " "}, {"duration_seconds": 301}, {"duration_seconds": 9}, {"seed": -1},
+    {"prompt": " "}, {"duration_seconds": 501}, {"duration_seconds": 9}, {"seed": -1},
     {"is_instrumental": True}, {"cot": "bad"}, {"abc": " "}, {"abc": "X:1", "cot": "off"},
     {"cfg_scale": float("nan")}, {"cfg_scale": float("inf")}, {"cfg_scale": 21},
 ])
@@ -160,6 +160,7 @@ def test_settings_and_readiness(tmp_path, monkeypatch):
     ready = MusicRunner(settings).readiness()
     assert ready["status"] == "not_ready"
     assert ready["backend"] == "yue2"
+    assert ready["max_duration_seconds"] == 500
     assert ready["missing"]
 
 
@@ -191,11 +192,12 @@ def test_api_song_download_and_auth(music):
                                      skeleton_runner=idle, beat_runner=idle, transcription_runner=idle,
                                      alignment_runner=idle)
     with TestClient(create_app(settings=settings, backend_factory=lambda _: backend)) as client:
-        payload = dict(prompt="folk", lyrics="[Verse]\nhello")
+        payload = dict(prompt="folk", lyrics="[Verse]\nhello", duration_seconds=500)
         assert client.post("/v1/music/generations", json=payload).status_code == 401
         client.headers["X-API-Key"] = "secret"
         catalog = client.get("/v1/models").json()["capabilities"]["music"]
         assert catalog["available"] and catalog["backend"] == "yue2"
+        assert catalog["max_duration_seconds"] == 500
         submitted = client.post("/v1/music/generations", json=payload)
         assert submitted.status_code == 202
         client.portal.call(backend.tasks.queue.join)
@@ -210,6 +212,8 @@ def test_api_song_download_and_auth(music):
                 assert "audio" in response.headers["content-type"]
             if output["filename"].endswith(".json"):
                 assert response.json()["truncated"]["semantic"] is True
+                assert response.json()["request"]["duration_seconds"] == 500
+        assert client.post("/v1/music/generations", json={**payload, "duration_seconds": 501}).status_code == 422
         assert client.post("/v1/music/generations", json={**payload, "abc": "X:1", "cot": "off"}).status_code == 422
 
 
@@ -258,7 +262,8 @@ def test_ui_client_submits_music():
     assert client.submit_music(dict(prompt="folk", lyrics="hello"))["id"] == "song"
 
 
-def test_worker_maps_real_pipeline_contract_and_limits_audio(tmp_path, monkeypatch):
+@pytest.mark.parametrize("duration", [10, 500])
+def test_worker_maps_real_pipeline_contract_and_limits_audio(tmp_path, monkeypatch, duration):
     from contextlib import contextmanager
     np = pytest.importorskip("numpy")
     from minimaxh3_service import music_memory
@@ -311,7 +316,7 @@ def test_worker_maps_real_pipeline_contract_and_limits_audio(tmp_path, monkeypat
             wav.setparams((2, 2, rate, 0, "NONE", "not compressed"))
             wav.writeframes((audio * 32767).astype("<i2").tobytes())
     monkeypatch.setitem(sys.modules, "soundfile", SimpleNamespace(write=write_audio))
-    request = MusicRequest(prompt="中文钢琴", duration_seconds=10, cot="melody", abc="X:1\nK:C\nCDEF|", cfg_scale=1.2)
+    request = MusicRequest(prompt="中文钢琴", duration_seconds=duration, cot="melody", abc="X:1\nK:C\nCDEF|", cfg_scale=1.2)
     source = tmp_path / "request.json"
     source.write_text(request.model_dump_json(), encoding="utf-8")
     output = tmp_path / "audio.wav"
@@ -319,14 +324,14 @@ def test_worker_maps_real_pipeline_contract_and_limits_audio(tmp_path, monkeypat
                              model_dir=tmp_path, device="cuda", memory_budget_gib=12, offload_ar=True))
     assert captured["load"]["local_files_only"] is True
     assert captured["load"]["backend"] == "torch-eager"
-    assert captured["sampling"] == {"max_tokens": 250, "min_tokens": 200}
+    assert captured["sampling"] == {"max_tokens": duration * 25, "min_tokens": 200}
     assert captured["plan"]["abc"] == request.abc
     assert captured["plan"]["lyrics"] == ""
     assert "instrumental, no vocals" in captured["plan"]["style"]
     assert captured["plan"]["cfg_scale"] == 1.2
-    assert MusicRunner._validate_audio(output, 10) == 10
+    assert MusicRunner._validate_audio(output, duration) == min(duration, 480001 / 48000)
     result = json.loads(output.with_suffix(".json").read_text(encoding="utf-8"))
-    assert result["truncated"] == {"abc": False, "semantic": True, "audio_cropped": True}
+    assert result["truncated"] == {"abc": False, "semantic": True, "audio_cropped": duration == 10}
     assert result["config"]["memory_policy"] == {"version": 1}
     captured["memory"]["on_progress"](16, 32)
     assert json.loads((tmp_path / "progress.json").read_text())["progress"] == pytest.approx(.80)
