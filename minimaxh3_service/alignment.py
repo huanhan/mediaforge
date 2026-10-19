@@ -6,17 +6,13 @@ from .transcription import TranscriptionRunner
 
 
 class AlignmentRunner(TranscriptionRunner):
-    @property
-    def max_seconds(self):
-        return min(180, self.settings.asr_max_seconds)
-
     def readiness(self):
         result = super().readiness()
         root = self.settings.aligner_model_path.expanduser().resolve()
         missing = [name for name in ALIGNER_FILES if not (root / name).is_file() or not (root / name).stat().st_size]
         result.update(status="not_ready" if missing or result["missing_dependencies"] else "ready",
                       backend="qwen3_forced_aligner", model=ALIGNER_ID, model_path=str(root), missing_models=missing,
-                      max_duration_seconds=self.max_seconds, word_timestamps=True, lyrics_alignment=True)
+                      max_duration_seconds=self.max_seconds or None, word_timestamps=True, lyrics_alignment=True)
         return result
 
     def worker_arguments(self, request, pcm, partial, extra):
@@ -24,6 +20,7 @@ class AlignmentRunner(TranscriptionRunner):
         return [sys.executable, "-m", "minimaxh3_service.alignment_worker", "--pcm", str(pcm),
                 "--output", str(partial), "--request", str(extra),
                 "--model", str(self.settings.aligner_model_path.expanduser().resolve()),
+                "--asr-model", str(self.settings.asr_model_path.expanduser().resolve()),
                 "--device", self.settings.asr_device, "--threads", str(self.settings.asr_cpu_threads)]
 
     def validate_document(self, document, request):

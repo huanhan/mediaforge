@@ -1454,7 +1454,7 @@
             "maxLength": 10000,
             "minLength": 1,
             "title": "Lyrics",
-            "description": "Confirmed lyrics, one subtitle per line. Maximum audio duration: 180 seconds."
+            "description": "Confirmed lyrics, one subtitle per line. Long audio is aligned in overlapping windows; no default track duration limit."
           },
           "title": {
             "type": "string",

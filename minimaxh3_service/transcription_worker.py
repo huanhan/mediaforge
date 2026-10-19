@@ -48,6 +48,38 @@ def assemble_result(request, signal, transcribe, model_revision=None):
             "chunks": chunks, "warnings": warnings}
 
 
+def create_transcriber(model_path, device, threads, language):
+    """Lazily load ASR; discarding the callback releases its model references."""
+    model = processor = None
+
+    def transcribe(window):
+        nonlocal model, processor
+        import torch
+        if model is None:
+            from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration
+            torch.set_num_threads(threads)
+            if device.startswith("cuda") and not torch.cuda.is_available():
+                raise RuntimeError("CUDA is unavailable; install CUDA PyTorch or set H3_ASR_DEVICE=cpu")
+            dtype = torch.bfloat16 if device.startswith("cuda") else torch.float32
+            processor = AutoProcessor.from_pretrained(str(model_path), local_files_only=True)
+            model = Qwen3ASRForConditionalGeneration.from_pretrained(
+                str(model_path), dtype=dtype, device_map=device, local_files_only=True,
+                attn_implementation="sdpa").eval()
+        with torch.inference_mode():
+            inputs = processor.apply_transcription_request(
+                audio=window, language=None if language == "auto" else language,
+            ).to(model.device, model.dtype)
+            output_ids = model.generate(**inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=False)
+            generated = output_ids[:, inputs["input_ids"].shape[1]:]
+            # Decode one sequence explicitly; return format differs for batch/single inputs.
+            parsed = processor.decode(generated[0], return_format="parsed")
+            eos = model.generation_config.eos_token_id
+            eos_ids = eos if isinstance(eos, list) else [eos]
+            truncated = generated.shape[1] >= MAX_NEW_TOKENS and int(generated[0, -1]) not in eos_ids
+            return parsed["transcription"], parsed.get("language"), truncated
+    return transcribe
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--pcm", type=Path, required=True)
@@ -62,33 +94,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     started = time.monotonic()
     signal = np.fromfile(args.pcm, dtype="<f4")
-    model = processor = None
-
-    def transcribe(window):
-        nonlocal model, processor
-        import torch
-        if model is None:
-            from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration
-            torch.set_num_threads(args.threads)
-            if args.device.startswith("cuda") and not torch.cuda.is_available():
-                raise RuntimeError("CUDA is unavailable; install CUDA PyTorch or set H3_ASR_DEVICE=cpu")
-            dtype = torch.bfloat16 if args.device.startswith("cuda") else torch.float32
-            processor = AutoProcessor.from_pretrained(str(args.model), local_files_only=True)
-            model = Qwen3ASRForConditionalGeneration.from_pretrained(
-                str(args.model), dtype=dtype, device_map=args.device, local_files_only=True,
-                attn_implementation="sdpa").eval()
-        with torch.inference_mode():
-            inputs = processor.apply_transcription_request(
-                audio=window, language=None if args.language == "auto" else args.language,
-            ).to(model.device, model.dtype)
-            output_ids = model.generate(**inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=False)
-            generated = output_ids[:, inputs["input_ids"].shape[1]:]
-            # Decode one sequence explicitly; return format differs for batch/single inputs.
-            parsed = processor.decode(generated[0], return_format="parsed")
-            eos = model.generation_config.eos_token_id
-            eos_ids = eos if isinstance(eos, list) else [eos]
-            truncated = generated.shape[1] >= MAX_NEW_TOKENS and int(generated[0, -1]) not in eos_ids
-            return parsed["transcription"], parsed.get("language"), truncated
+    transcribe = create_transcriber(args.model, args.device, args.threads, args.language)
 
     revision = args.model / "REVISION"
     result = assemble_result(args, signal, transcribe, revision.read_text().strip() if revision.is_file() else None)

@@ -27,7 +27,7 @@ uv run --no-sync minimaxh3
 | H3_ASR_MODEL_PATH | models/asr/Qwen3-ASR-1.7B | 模型目录 |
 | H3_ASR_DEVICE | cuda | cpu 或 cuda[:index] |
 | H3_ASR_CPU_THREADS | 4 | CPU 线程数 |
-| H3_ASR_MAX_SECONDS | 900 | 音频时长上限，超限报错 |
+| H3_ASR_MAX_SECONDS | 0 | 默认不限制识别、歌词对齐的音乐时长；正数启用部署限额，超限报错 |
 | H3_ASR_TIMEOUT_SECONDS | 1800 | 单任务解码与推理总超时 |
 
 `GET /readyz` 的 `transcription` 及 `GET /v1/models` 的同名 capability 报告模型文件/依赖是否齐全。该检查不加载权重或探测可用显存；CUDA/显存故障通过任务 `error` 返回。不需要安装视频权重才能执行识别。
@@ -96,7 +96,7 @@ RTX 4070 Ti 12 GB、PyTorch 2.8.0+cu126、Transformers 5.14.1、CUDA BF16，以�
 {"file_id":"上传的音乐 ID","lyrics":"第一行歌词\n第二行歌词","language":"zh"}
 ```
 
-支持 1–180 秒音频，语言 `zh/en/yue`。每个非空行生成一条字幕。返回 202，沿用任务查询与下载接口，任务 `kind=alignment`。JSON 包含 `timing=forced_alignment`、原样的 `text`、逐行 `cues[{id,start,end,text}]`、逐词 `words[{text,start,end}]`，所有时间相对原音乐起点，保留前奏。重复段落须在歌词中按实际演唱顺序提供，不自动补词。
+音频至少 1 秒，默认不设总时长上限，语言 `zh/en/yue`。超过 180 秒时，先使用本地 Qwen3-ASR 按 120 秒窗口识别以定位确认歌词所在段落，再用前后各 30 秒重叠的窗口进行强制对齐；所有输出时间戳来自对齐模型，并加回原曲偏移。ASR 结果仅用于定位，不覆盖人工确认歌词；匹配不足、识别截断或时间重叠时明确报错，需检查歌词，不按字数均分时间。长音频需同时安装 ASR 与 ForcedAligner 模型，两者依次加载。每个非空行生成一条字幕。返回 202，沿用任务查询与下载接口，任务 `kind=alignment`。JSON 包含 `timing=forced_alignment`、原样的 `text`、逐行 `cues[{id,start,end,text}]`、逐词 `words[{text,start,end}]`，所有时间相对原音乐起点，保留前奏。重复段落须在歌词中按实际演唱顺序提供，不自动补词。
 
 对齐仍可能受长拖音、合唱和错误歌词影响；无效、越界或整行零时长结果会报错，不把平均分配的时间伪装成模型对齐。相同测试歌曲对齐实测 11.603 秒，16 行，首行从 22.88 秒开始。
 

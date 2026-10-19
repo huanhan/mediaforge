@@ -92,7 +92,7 @@ class SubmittedTranscriptionTask(BaseModel):
 class AlignmentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     file_id: FileId
-    lyrics: str = Field(min_length=1, max_length=10000, description="Confirmed lyrics, one subtitle per line. Maximum audio duration: 180 seconds.")
+    lyrics: str = Field(min_length=1, max_length=10000, description="Confirmed lyrics, one subtitle per line. Long audio is aligned in overlapping windows; no default track duration limit.")
     title: str = Field(default="", max_length=200)
     language: Literal["zh", "en", "yue"] = "zh"
 

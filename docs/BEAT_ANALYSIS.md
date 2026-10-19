@@ -20,7 +20,7 @@ uv run --no-sync minimaxh3-setup-beat
 | H3_BEAT_MODEL_PATH | models/beat/final0.ckpt | 本地模型 |
 | H3_BEAT_DEVICE | cpu | cpu 或 cuda[:index] |
 | H3_BEAT_CPU_THREADS | 4 | CPU 推理线程数 |
-| H3_BEAT_MAX_SECONDS | 900 | 最大音乐时长，超限失败，不截断分析 |
+| H3_BEAT_MAX_SECONDS | 0 | 默认不限制音乐时长；可显式设为正数启用部署限额，超限失败，不截断分析 |
 | H3_BEAT_TIMEOUT_SECONDS | 600 | 解码与推理总超时 |
 
 重启 API 后，`GET /readyz` 的 `beat_analysis` 和 `GET /v1/models` 的同名 capability 提供安装状态。其就绪不要求安装 H3 视频模型。

@@ -45,13 +45,13 @@ class Settings:
     pose_timeout_seconds: float = 3600.0
     beat_model_path: Path = Path("models/beat/final0.ckpt")
     beat_device: str = "cpu"
-    beat_max_seconds: float = 900.0
+    beat_max_seconds: float = 0.0  # Zero leaves the uploaded track duration unrestricted.
     beat_timeout_seconds: float = 600.0
     beat_cpu_threads: int = 4
     asr_model_path: Path = Path("models/asr/Qwen3-ASR-1.7B")
     aligner_model_path: Path = Path("models/asr/Qwen3-ForcedAligner-0.6B")
     asr_device: str = "cuda"
-    asr_max_seconds: float = 900.0
+    asr_max_seconds: float = 0.0
     asr_timeout_seconds: float = 1800.0
     asr_cpu_threads: int = 4
     reserve_vram_gb: float = 1.0
@@ -88,8 +88,8 @@ class Settings:
         if not 1 <= self.asr_cpu_threads <= 64:
             raise ValueError("H3_ASR_CPU_THREADS must be between 1 and 64")
         for name, value in (("MAX_SECONDS", self.asr_max_seconds), ("TIMEOUT_SECONDS", self.asr_timeout_seconds)):
-            if not math.isfinite(value) or value <= 0:
-                raise ValueError(f"H3_ASR_{name} must be finite and positive")
+            if not math.isfinite(value) or value < 0 or (name == "TIMEOUT_SECONDS" and value == 0):
+                raise ValueError(f"H3_ASR_{name} must be finite and positive (MAX_SECONDS=0 disables the duration limit)")
         if self.beat_device != "cpu" and self.beat_device != "cuda" and not (
             self.beat_device.startswith("cuda:") and self.beat_device[5:].isdigit()
         ):
@@ -97,8 +97,8 @@ class Settings:
         if not 1 <= self.beat_cpu_threads <= 64:
             raise ValueError("H3_BEAT_CPU_THREADS must be between 1 and 64")
         for name, value in (("MAX_SECONDS", self.beat_max_seconds), ("TIMEOUT_SECONDS", self.beat_timeout_seconds)):
-            if not math.isfinite(value) or value <= 0:
-                raise ValueError(f"H3_BEAT_{name} must be finite and positive")
+            if not math.isfinite(value) or value < 0 or (name == "TIMEOUT_SECONDS" and value == 0):
+                raise ValueError(f"H3_BEAT_{name} must be finite and positive (MAX_SECONDS=0 disables the duration limit)")
         if self.pose_max_frames < 2:
             raise ValueError("H3_POSE_MAX_FRAMES must be at least 2")
         if not math.isfinite(self.pose_timeout_seconds) or self.pose_timeout_seconds <= 0:

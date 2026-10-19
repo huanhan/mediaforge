@@ -34,7 +34,7 @@ class BeatAnalysisRunner:
             "device": self.settings.beat_device, "models_loaded": False,
             "missing_dependencies": missing,
             "missing_models": [] if model.is_file() else [str(model)],
-            "max_duration_seconds": self.settings.beat_max_seconds,
+            "max_duration_seconds": self.settings.beat_max_seconds or None,
             "lyrics_alignment": False,
         }
 
@@ -81,14 +81,15 @@ class BeatAnalysisRunner:
         try:
             progress(0.05)
             # Decode from the start without silence removal or independently timed chunks.
-            # One extra second detects over-limit input rather than silently truncating it.
+            # Only an explicitly configured deployment limit bounds decoding.
+            limit = ["-t", str(self.settings.beat_max_seconds + 1)] if self.settings.beat_max_seconds else []
             self._run([
                 "ffmpeg", "-nostdin", "-v", "error", "-y", "-protocol_whitelist", "file,pipe",
                 "-i", str(source), "-map", "0:a:0", "-vn", "-ac", "1", "-ar", str(SAMPLE_RATE),
-                "-t", str(self.settings.beat_max_seconds + 1), "-f", "f32le", str(pcm),
+                *limit, "-f", "f32le", str(pcm),
             ], log, cancel, deadline)
             duration = pcm.stat().st_size / (4 * SAMPLE_RATE)
-            if duration > self.settings.beat_max_seconds:
+            if self.settings.beat_max_seconds and duration > self.settings.beat_max_seconds:
                 raise ValueError(f"Audio exceeds the {self.settings.beat_max_seconds:g} second limit")
             if duration < 1:
                 raise ValueError("Audio must contain at least one second of decodable samples")

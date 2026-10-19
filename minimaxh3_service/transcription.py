@@ -55,7 +55,7 @@ class TranscriptionRunner:
                 "backend": "qwen3_asr", "model": MODEL_ID, "model_path": str(root),
                 "device": self.settings.asr_device, "models_loaded": False,
                 "missing_dependencies": missing, "missing_models": missing_models,
-                "max_duration_seconds": self.settings.asr_max_seconds,
+                "max_duration_seconds": self.max_seconds or None,
                 "word_timestamps": False, "lyrics_alignment": False}
 
     def _run(self, arguments, log, cancel, deadline):
@@ -100,11 +100,12 @@ class TranscriptionRunner:
         success = False
         try:
             progress(.05)
+            limit = ["-t", str(self.max_seconds+1)] if self.max_seconds else []
             self._run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-protocol_whitelist", "file,pipe",
                        "-i", str(source), "-map", "0:a:0", "-vn", "-ac", "1", "-ar", str(SAMPLE_RATE),
-                       "-t", str(self.max_seconds+1), "-f", "f32le", str(pcm)], log, cancel, deadline)
+                       *limit, "-f", "f32le", str(pcm)], log, cancel, deadline)
             duration = pcm.stat().st_size / (4*SAMPLE_RATE)
-            if duration > self.max_seconds:
+            if self.max_seconds and duration > self.max_seconds:
                 raise ValueError(f"Audio exceeds the {self.max_seconds:g} second limit")
             if duration < 1:
                 raise ValueError("Audio must contain at least one second of decodable samples")
