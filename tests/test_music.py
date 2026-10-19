@@ -259,9 +259,18 @@ def test_ui_client_submits_music():
 
 
 def test_worker_maps_real_pipeline_contract_and_limits_audio(tmp_path, monkeypatch):
+    from contextlib import contextmanager
     np = pytest.importorskip("numpy")
+    from minimaxh3_service import music_memory
     from minimaxh3_service.music_worker import generate
     captured = {}
+
+    @contextmanager
+    def memory_scope(**kwargs):
+        captured["memory"] = kwargs
+        yield {"version": 1}
+
+    monkeypatch.setattr(music_memory, "yue2_memory_scope", memory_scope)
 
     class Pipeline:
         weights = {"test": "fixture"}
@@ -318,3 +327,6 @@ def test_worker_maps_real_pipeline_contract_and_limits_audio(tmp_path, monkeypat
     assert MusicRunner._validate_audio(output, 10) == 10
     result = json.loads(output.with_suffix(".json").read_text(encoding="utf-8"))
     assert result["truncated"] == {"abc": False, "semantic": True, "audio_cropped": True}
+    assert result["config"]["memory_policy"] == {"version": 1}
+    captured["memory"]["on_progress"](16, 32)
+    assert json.loads((tmp_path / "progress.json").read_text())["progress"] == pytest.approx(.80)

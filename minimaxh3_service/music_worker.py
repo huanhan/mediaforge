@@ -34,6 +34,11 @@ def generate(args):
     import numpy as np
     import soundfile as sf
     from yue2 import YuE2Pipeline
+    # This file is also launched directly, outside the service package.
+    if __package__:
+        from .music_memory import yue2_memory_scope
+    else:
+        from music_memory import yue2_memory_scope
 
     request = json.loads(args.request.read_text(encoding="utf-8"))
     max_tokens = request["duration_seconds"] * 25  # VAE: 1 semantic frame = 1920 / 48000 s.
@@ -51,7 +56,8 @@ def generate(args):
 
     started = time.monotonic()
     report(.03)
-    with YuE2Pipeline.from_pretrained(str(args.model_dir / "YuE2-3B"),
+    with yue2_memory_scope(on_progress=lambda done, total: report(.72 + .16 * done / total)) as memory_policy, \
+         YuE2Pipeline.from_pretrained(str(args.model_dir / "YuE2-3B"),
             vae=str(args.model_dir / "YuE2-Vae"), local_files_only=True, device=args.device,
             memory_budget_gib=args.memory_budget_gib, offload_ar=args.offload_ar,
             backend="torch-eager", progress=False) as pipe:
@@ -86,6 +92,7 @@ def generate(args):
                         truncated=dict(abc=bool(plan.truncated), semantic=bool(semantic.truncated), audio_cropped=cropped),
                         request=request, elapsed_seconds=round(time.monotonic() - started, 3),
                         config=pipe.effective_config(plan.request, semantic_sampling=sampling), weights=pipe.weights)
+        metadata["config"]["memory_policy"] = memory_policy
         args.output.with_suffix(".json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
         if plan.abc:
             args.output.with_suffix(".abc").write_text(plan.abc, encoding="utf-8")
