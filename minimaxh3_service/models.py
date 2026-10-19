@@ -79,6 +79,19 @@ class SubmittedTranscriptionTask(BaseModel):
     queue_number: int
 
 
+class AlignmentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    file_id: FileId
+    lyrics: str = Field(min_length=1, max_length=10000, description="Confirmed lyrics, one subtitle per line. Maximum audio duration: 180 seconds.")
+    title: str = Field(default="", max_length=200)
+    language: Literal["zh", "en", "yue"] = "zh"
+
+    @field_validator("file_id")
+    @classmethod
+    def safe_file_id(cls, value: str) -> str:
+        return validate_file_id(value)
+
+
 class SourceVideo(BaseModel):
     model_config = ConfigDict(extra="forbid")
     file_id: FileId
@@ -524,7 +537,7 @@ class OutputFile(BaseModel):
 
 class TaskStatus(BaseModel):
     id: str = Field(description="Task identifier.")
-    kind: Literal["generation", "upscale", "removal", "music", "depth", "skeleton", "beat_analysis", "transcription"] | None = Field(
+    kind: Literal["generation", "upscale", "removal", "music", "depth", "skeleton", "beat_analysis", "transcription", "alignment"] | None = Field(
         default=None,
         description="Task type. All types use the same status endpoints.",
     )

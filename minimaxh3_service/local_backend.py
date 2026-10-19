@@ -28,6 +28,8 @@ from .models import AUDIO_EXTENSIONS, BeatAnalysisRequest, SubmittedBeatAnalysis
 from .beat import BeatAnalysisRunner
 from .models import TranscriptionRequest, SubmittedTranscriptionTask
 from .transcription import TranscriptionRunner
+from .alignment import AlignmentRunner
+from .models import AlignmentRequest
 
 
 def source_canvas(width: int, height: int) -> tuple[int, int]:
@@ -51,6 +53,7 @@ class LocalGenerationBackend:
         skeleton_runner=None,
         beat_runner=None,
         transcription_runner=None,
+        alignment_runner=None,
     ) -> None:
         self.settings = settings
         self.assets = LocalAssetStore(
@@ -80,6 +83,7 @@ class LocalGenerationBackend:
             skeleton_runner=skeleton_runner or SkeletonRunner(settings, self.assets.resolve_input),
             beat_runner=beat_runner or BeatAnalysisRunner(settings, self.assets.resolve_input),
             transcription_runner=transcription_runner or TranscriptionRunner(settings, self.assets.resolve_input),
+            alignment_runner=alignment_runner or AlignmentRunner(settings, self.assets.resolve_input),
         )
 
     async def start(self) -> None:
@@ -98,6 +102,7 @@ class LocalGenerationBackend:
         readiness["skeleton"] = self.tasks.skeleton_runner.readiness()
         readiness["beat_analysis"] = self.tasks.beat_runner.readiness()
         readiness["transcription"] = self.tasks.transcription_runner.readiness()
+        readiness["alignment"] = self.tasks.alignment_runner.readiness()
         return readiness
 
     async def upload(
@@ -241,6 +246,16 @@ class LocalGenerationBackend:
             raise BackendError("Qwen3-ASR is not installed; see docs/TRANSCRIPTION.md",
                                status_code=503, code="transcription_not_ready", detail=readiness)
         return await self.tasks.submit_transcription(request)
+
+    async def submit_alignment(self, request: AlignmentRequest) -> SubmittedTranscriptionTask:
+        source = self.assets.resolve_input(request.file_id)
+        if source.suffix.lower() not in AUDIO_EXTENSIONS:
+            raise BackendError("alignment requires uploaded audio", status_code=415, code="invalid_audio")
+        readiness = self.tasks.alignment_runner.readiness()
+        if readiness.get("status") != "ready":
+            raise BackendError("Install the lyric aligner: python -m minimaxh3_service.setup_asr --aligner",
+                               status_code=503, code="alignment_not_ready", detail=readiness)
+        return await self.tasks.submit_alignment(request)
 
     async def get_task(self, task_id: str) -> BackendTask | None:
         return self.tasks.get(task_id)

@@ -530,6 +530,76 @@
         ]
       }
     },
+    "/v1/audio/alignments": {
+      "post": {
+        "tags": [
+          "transcription"
+        ],
+        "summary": "Align confirmed lyric lines to uploaded audio",
+        "description": "Local Qwen3 ForcedAligner. Maximum 180 seconds. Supply lyrics with one subtitle per line; returns cues and word timestamps. Uses the shared task queue.",
+        "operationId": "create_alignment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlignmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmittedTranscriptionTask"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/audio/transcriptions": {
       "post": {
         "tags": [
@@ -1351,6 +1421,46 @@
   },
   "components": {
     "schemas": {
+      "AlignmentRequest": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "File Id"
+          },
+          "lyrics": {
+            "type": "string",
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Lyrics",
+            "description": "Confirmed lyrics, one subtitle per line. Maximum audio duration: 180 seconds."
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Title",
+            "default": ""
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "zh",
+              "en",
+              "yue"
+            ],
+            "title": "Language",
+            "default": "zh"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "file_id",
+          "lyrics"
+        ],
+        "title": "AlignmentRequest"
+      },
       "BeatAnalysisRequest": {
         "properties": {
           "file_id": {
@@ -2476,7 +2586,8 @@
                   "depth",
                   "skeleton",
                   "beat_analysis",
-                  "transcription"
+                  "transcription",
+                  "alignment"
                 ]
               },
               {
@@ -2925,7 +3036,7 @@
   "tags": [
     {
       "name": "transcription",
-      "description": "Local Qwen3-ASR song and speech transcription. Text output; no forced lyric alignment."
+      "description": "Local Qwen3-ASR transcription and forced alignment of confirmed lyrics."
     },
     {
       "name": "beat",

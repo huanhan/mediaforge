@@ -2,7 +2,7 @@
 
 `POST /v1/audio/transcriptions` 使用 **Qwen3-ASR-1.7B** 从上传音频识别歌词/语音，返回原始识别文本 TXT 和 JSON。Node.js 只调用 HTTP，模型和 Python 环境均在 minimaxh3 项目内。
 
-这一版先提供歌词识别，不做给定歌词的强制对齐，不输出逐字/逐句时间戳或 SRT。画面卡点继续使用 [节奏分析 API](BEAT_ANALYSIS.md)；字幕跟随人声，需要另接强制对齐。歌名 `title` 仅保存为元数据，不用于猜测或改写歌词。
+识别接口只输出文本；人工修改歌词后可调用下方的独立强制对齐接口。画面卡点使用 [节奏分析 API](BEAT_ANALYSIS.md)，字幕时间跟随人声。歌名 `title` 仅保存为元数据，不用于猜测或改写歌词。
 
 ## 安装与运行
 
@@ -79,3 +79,25 @@ RTX 4070 Ti 12 GB、PyTorch 2.8.0+cu126、Transformers 5.14.1、CUDA BF16，以�
 原始结果保存在 `outputs/transcriptions/Suno_b96cc9c5/qwen3-asr.json` 与 `qwen3-asr.txt`（本机产物，不随代码提交）。相比之前的 SenseVoice 样本，本次输出恢复了 GPT/Claude 名称及多句漏词；没有标准歌词，不计算识别准确率。该耗时是一次实测，不是性能保证。
 
 本次后端回归：340 项测试通过。已有运行中的服务需要重启，才会加载新增路由。
+
+## 人工确认歌词后的时间对齐
+
+安装独立的 Qwen3-ForcedAligner-0.6B 权重，再重启 API：
+
+```powershell
+.venv/Scripts/python.exe -m minimaxh3_service.setup_asr --aligner
+```
+
+模型位于 `models/asr/Qwen3-ForcedAligner-0.6B`，可通过 `H3_ALIGNER_MODEL_PATH` 修改。固定上游版本 `c07281df297b9905d24a508279258cccf987a064`，使用相同 Transformers 环境和 GPU 队列；识别模型与对齐模型分进程运行。
+
+`POST /v1/audio/alignments`，请求：
+
+```json
+{"file_id":"上传的音乐 ID","lyrics":"第一行歌词\n第二行歌词","language":"zh"}
+```
+
+支持 1–180 秒音频，语言 `zh/en/yue`。每个非空行生成一条字幕。返回 202，沿用任务查询与下载接口，任务 `kind=alignment`。JSON 包含 `timing=forced_alignment`、原样的 `text`、逐行 `cues[{id,start,end,text}]`、逐词 `words[{text,start,end}]`，所有时间相对原音乐起点，保留前奏。重复段落须在歌词中按实际演唱顺序提供，不自动补词。
+
+对齐仍可能受长拖音、合唱和错误歌词影响；无效、越界或整行零时长结果会报错，不把平均分配的时间伪装成模型对齐。相同测试歌曲对齐实测 11.603 秒，16 行，首行从 22.88 秒开始。
+
+加入对齐接口后的后端全量回归：345 项通过。另通过真实 HTTP 请求验证了同首歌曲的对齐提交、轮询和下载，16 行、首句 22.88 秒，原歌词保持不变；该次推理耗时 32.366 秒。

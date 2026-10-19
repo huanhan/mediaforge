@@ -33,7 +33,7 @@ from .config import Settings
 from .local_backend import LocalGenerationBackend
 from .models import DepthRequest, SubmittedDepthTask, SkeletonRequest, SubmittedSkeletonTask
 from .models import BeatAnalysisRequest, SubmittedBeatAnalysisTask
-from .models import TranscriptionRequest, SubmittedTranscriptionTask
+from .models import TranscriptionRequest, SubmittedTranscriptionTask, AlignmentRequest
 from .models import (
     AUDIO_EXTENSIONS,
     MusicRequest,
@@ -61,7 +61,7 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 OPENAPI_TAGS = [
-    {"name": "transcription", "description": "Local Qwen3-ASR song and speech transcription. Text output; no forced lyric alignment."},
+    {"name": "transcription", "description": "Local Qwen3-ASR transcription and forced alignment of confirmed lyrics."},
     {"name": "beat", "description": "Analyze uploaded music for beats, downbeats, onsets and energy; timestamps are in original-audio seconds."},
     {"name": "pose", "description": "Local DWPose skeleton extraction."},
     {"name": "depth", "description": "Local temporal video depth estimation with Video Depth Anything Small."},
@@ -326,6 +326,9 @@ def create_app(
                 "transcription": {**readiness.get("transcription", {"status": "not_ready"}),
                                   "available": readiness.get("transcription", {}).get("status") == "ready",
                                   "endpoint": "/v1/audio/transcriptions", "outputs": ["json", "txt"]},
+                "alignment": {**readiness.get("alignment", {"status": "not_ready"}),
+                              "available": readiness.get("alignment", {}).get("status") == "ready",
+                              "endpoint": "/v1/audio/alignments", "outputs": ["json", "txt"]},
                 "beat_analysis": {**readiness.get("beat_analysis", {"status": "not_ready"}),
                                   "available": readiness.get("beat_analysis", {}).get("status") == "ready",
                                   "endpoint": "/v1/music/analyses", "format": "json"},
@@ -527,6 +530,16 @@ def create_app(
             width=submitted.width,
             height=submitted.height,
         )
+
+    @router.post("/audio/alignments", response_model=SubmittedTranscriptionTask, status_code=202,
+                 tags=["transcription"], summary="Align confirmed lyric lines to uploaded audio",
+                 description="Local Qwen3 ForcedAligner. Maximum 180 seconds. Supply lyrics with one subtitle per line; returns cues and word timestamps. Uses the shared task queue.",
+                 operation_id="create_alignment", responses={503: BACKEND_ERROR_RESPONSE})
+    async def create_alignment(request: Request, body: AlignmentRequest) -> SubmittedTranscriptionTask:
+        submit = getattr(_backend(request), "submit_alignment", None)
+        if submit is None:
+            raise HTTPException(status_code=503, detail="Lyric alignment is not configured")
+        return await submit(body)
 
     @router.post("/audio/transcriptions", response_model=SubmittedTranscriptionTask, status_code=202,
                  tags=["transcription"], summary="Transcribe a song or speech with local Qwen3-ASR",

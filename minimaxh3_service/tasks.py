@@ -21,7 +21,7 @@ from .models import MusicRequest, SubmittedMusicTask
 from .models import DepthRequest, SubmittedDepthTask
 from .models import SkeletonRequest, SubmittedSkeletonTask
 from .models import BeatAnalysisRequest, SubmittedBeatAnalysisTask
-from .models import TranscriptionRequest, SubmittedTranscriptionTask
+from .models import TranscriptionRequest, SubmittedTranscriptionTask, AlignmentRequest
 from .workflow import GenerationPlan, SegmentProgress, build_plan
 
 
@@ -68,7 +68,7 @@ class UpscaleRunner(Protocol):
 class _TaskRecord:
     task: BackendTask
     kind: TaskKind
-    payload: GenerationPlan | UpscaleRequest | RemovalRequest | MusicRequest | DepthRequest | SkeletonRequest | BeatAnalysisRequest | TranscriptionRequest
+    payload: GenerationPlan | UpscaleRequest | RemovalRequest | MusicRequest | DepthRequest | SkeletonRequest | BeatAnalysisRequest | TranscriptionRequest | AlignmentRequest
     output: OutputArtifact
     cancel: threading.Event = field(default_factory=threading.Event)
 
@@ -92,6 +92,7 @@ class LocalTaskManager:
         skeleton_runner=None,
         beat_runner=None,
         transcription_runner=None,
+        alignment_runner=None,
     ) -> None:
         self.runner = runner
         self.output_factory = output_factory
@@ -102,6 +103,7 @@ class LocalTaskManager:
         self.skeleton_runner = skeleton_runner
         self.beat_runner = beat_runner
         self.transcription_runner = transcription_runner
+        self.alignment_runner = alignment_runner
         self.music_output_factory = music_output_factory
         self.upscale_output_factory = upscale_output_factory
         self.queue: asyncio.Queue[str] = asyncio.Queue(maxsize=max_queue_size)
@@ -130,6 +132,8 @@ class LocalTaskManager:
             with contextlib.suppress(Exception):
                 await asyncio.shield(self._release_task)
         runners = []
+        if self.alignment_runner is not None:
+            runners.append(self.alignment_runner)
         if self.transcription_runner is not None:
             runners.append(self.transcription_runner)
         if self.beat_runner is not None:
@@ -301,6 +305,22 @@ class LocalTaskManager:
         await self.queue.put(task_id)
         return SubmittedTranscriptionTask(id=task_id, queue_number=number)
 
+    async def submit_alignment(self, request: AlignmentRequest) -> SubmittedTranscriptionTask:
+        if self.alignment_runner is None:
+            raise BackendError("alignment is not configured", status_code=503, code="alignment_not_ready")
+        self._ensure_queue_space()
+        task_id = uuid.uuid4().hex
+        number = self._queue_number()
+        base = self.output_factory(task_id, "alignment/lyrics")
+        output = OutputArtifact(base.path.with_suffix(".json").name, base.subfolder, base.path.with_suffix(".json"))
+        self.records[task_id] = _TaskRecord(
+            task=BackendTask(id=task_id, status="queued", kind="alignment", progress=0.0,
+                             raw_status={"output_roles": ["alignment", "text"], "backend": "qwen3_forced_aligner"}),
+            kind="alignment", payload=request, output=output,
+        )
+        await self.queue.put(task_id)
+        return SubmittedTranscriptionTask(id=task_id, queue_number=number)
+
     def get(self, task_id: str) -> BackendTask | None:
         record = self.records.get(task_id)
         if record is None:
@@ -355,6 +375,8 @@ class LocalTaskManager:
             return None
 
     def _runner_for(self, kind: TaskKind) -> H3Runner | UpscaleRunner:
+        if kind == "alignment":
+            return self.alignment_runner
         if kind == "transcription":
             return self.transcription_runner
         if kind == "beat_analysis":
@@ -391,6 +413,10 @@ class LocalTaskManager:
         return True
 
     async def _execute(self, record: _TaskRecord, progress: Callable[[float], None]) -> None:
+        if record.kind == "alignment":
+            record.task.outputs = await asyncio.to_thread(
+                self.alignment_runner.process, record.payload, record.output, record.cancel, progress)
+            return
         if record.kind == "transcription":
             record.task.outputs = await asyncio.to_thread(
                 self.transcription_runner.process, record.payload, record.output, record.cancel, progress)
@@ -471,7 +497,7 @@ class LocalTaskManager:
                     raise GenerationCanceled("task canceled")
                 record.task.status = "succeeded"
                 record.task.progress = 1.0
-                if record.kind not in {"removal", "depth", "skeleton", "transcription"}:
+                if record.kind not in {"removal", "depth", "skeleton", "transcription", "alignment"}:
                     record.task.outputs = [record.output]
             except GenerationCanceled:
                 record.output.path.unlink(missing_ok=True)

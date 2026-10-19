@@ -49,6 +49,7 @@ class Settings:
     beat_timeout_seconds: float = 600.0
     beat_cpu_threads: int = 4
     asr_model_path: Path = Path("models/asr/Qwen3-ASR-1.7B")
+    aligner_model_path: Path = Path("models/asr/Qwen3-ForcedAligner-0.6B")
     asr_device: str = "cuda"
     asr_max_seconds: float = 900.0
     asr_timeout_seconds: float = 1800.0
@@ -126,6 +127,7 @@ class Settings:
         max_upload_mb = int(os.getenv("H3_MAX_UPLOAD_MB", "2048"))
         return cls(
             asr_model_path=Path(os.getenv("H3_ASR_MODEL_PATH", str(defaults.asr_model_path))),
+            aligner_model_path=Path(os.getenv("H3_ALIGNER_MODEL_PATH", str(defaults.aligner_model_path))),
             asr_device=os.getenv("H3_ASR_DEVICE", defaults.asr_device),
             asr_max_seconds=float(os.getenv("H3_ASR_MAX_SECONDS", str(defaults.asr_max_seconds))),
             asr_timeout_seconds=float(os.getenv("H3_ASR_TIMEOUT_SECONDS", str(defaults.asr_timeout_seconds))),
