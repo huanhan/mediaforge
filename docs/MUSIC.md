@@ -1,74 +1,123 @@
-# 本地音乐生成
+# YuE2 音乐生成与 API
 
-默认使用 **ACE-Step v1 3.5B**，在本机直接加载权重，通过已有 Comfy 推理内核运行，不启动 ComfyUI 服务，不需要 MiniMax 云 API 或独立 Linux 音乐服务器。实际模型不是 MiniMax Music 3。
+音乐使用 [YuE 仓库当前主线的 YuE2](https://github.com/multimodal-art-projection/YuE)，模型为 **m-a-p/YuE2-3B + YuE2-Vae**。旧 MiniMax Music 3 HTTP 适配器和 ACE-Step 推理入口已移除；视频仍使用 MiniMax H3。旧音乐权重文件不会自动删除。
 
-支持曲风描述生成纯音乐、歌词生成歌曲、10–120 秒、随机种子、任务状态、试听和 44.1 kHz 立体声 PCM WAV 下载。英文曲风提示词通常更稳定。模型采样结果受种子影响，不保证精确遵循所有乐器和歌词要求。
+支持曲风与歌词生成歌曲、空歌词请求纯音乐、乐谱规划、ABC 乐谱输入、种子、进度、取消及下载。输出为 **48 kHz、双声道、16-bit PCM WAV**，同时提供生成记录 JSON；有乐谱时另提供 `.abc`。空歌词和 `instrumental` 提示不能保证完全无人声。
 
-## 安装与启动
+## 安装
 
-沿用本项目的 Python 3.13 / CUDA PyTorch / Comfy 内核运行环境，然后下载音乐权重：
+YuE2 使用独立 Python 3.12 环境，固定 PyTorch 2.10.0 / Transformers 4.57.6，不修改 H3 的 Python 3.13 / PyTorch 2.8 环境。需先安装 Git、uv 和 NVIDIA 驱动。在项目目录使用服务环境的 Python：
 
 ```powershell
-uv run python -m minimaxh3_service.setup_music
-uv run --extra ui minimaxh3
+python -m minimaxh3_service.setup_music
+python -m minimaxh3_service
 ```
 
-下载器从 ModelScope 的 Comfy-Org/ACE-Step_ComfyUI_repackaged 获取固定版本权重，并验证大小和 SHA-256，支持中断续传。模型约 7.7 GB，保存至 models/music/ace_step_v1_3.5b.safetensors。下载完成后生成过程无需联网。
+安装器通过 uv 创建 `.runtime/yue2-env`，安装 CUDA 12.8 PyTorch 和固定提交的 YuE2，然后下载模型至 `models/music/yue2/`。权重共约 7.8 GB，此外需要独立 PyTorch 环境空间。下载可续传，并以固定 SHA-256 校验权重。生成阶段强制离线，不会临时下载模型。
 
-可用 H3_MUSIC_MODEL_PATH 指定这个权重文件的位置。H3_MUSIC_BACKEND 默认为 native。音乐与视频、超分共用 GPU 队列，切换任务前释放前一种模型，空闲时释放音乐模型。首次生成包含权重加载时间。
+```powershell
+# 只装运行环境
+python -m minimaxh3_service.setup_music --runtime-only
+# 自定义位置；随后配置 H3_MUSIC_PYTHON 和 H3_MUSIC_MODEL_PATH
+python -m minimaxh3_service.setup_music --runtime-dir D:/runtimes/yue2 --model-dir D:/models/yue2
+# 单独重试下载，必须使用 YuE2 环境的 Python
+.runtime/yue2-env/Scripts/python.exe minimaxh3_service/setup_music.py --models-only
+```
 
-访问 /ui/ 的“音乐生成”，输入曲风描述，歌词留空生成纯音乐。默认提供“轻快、尤克里里、钢琴、拍手、118 BPM”示例。点击“检查音乐服务”可以查看实际模型及就绪状态。
+Linux 的独立解释器路径为 `.runtime/yue2-env/bin/python`。官方推荐 Linux、支持 BF16 的 NVIDIA GPU、24 GB 显存。此适配器默认启用 AR 卸载、12 GiB 预算和 eager 推理；较长请求仍可能超出 12 GB 显存，显存预算并非完整的逐层卸载。CPU 可用于兼容性调试，生成速度会很慢。
 
-排队任务可以取消；设置 H3_ALLOW_INTERRUPT_RUNNING=true 后，本地音乐任务可在采样步之间取消。模型加载和解码期间需等到下一个取消检查点。
+| 环境变量 | 默认值 | 作用 |
+|---|---|---|
+| `H3_MUSIC_PYTHON` | Windows: `.runtime/yue2-env/Scripts/python.exe`；Linux: `.runtime/yue2-env/bin/python` | 独立解释器 |
+| `H3_MUSIC_MODEL_PATH` | `models/music/yue2` | 包含 `YuE2-3B` 和 `YuE2-Vae` 的目录 |
+| `H3_MUSIC_DEVICE` | `cuda` | `cuda`、`cuda:0` 等或 `cpu` |
+| `H3_MUSIC_MEMORY_BUDGET_GIB` | `12` | 必须大于 2；24 GB 卡可设为 24 |
+| `H3_MUSIC_OFFLOAD_AR` | `true` | 声学合成阶段卸载 AR 权重 |
+| `H3_MUSIC_TIMEOUT_SECONDS` | `3600` | 单任务超时，含加载与解码 |
+| `H3_ALLOW_INTERRUPT_RUNNING` | `false` | 设为 `true` 可终止运行中的任务 |
+| `H3_API_KEY` | 空 | 服务鉴权，支持 `X-API-Key` 和 Bearer |
+
+原 `H3_MUSIC_BACKEND`、`H3_MUSIC_BASE_URL`、`H3_MUSIC_MODEL`、`H3_MUSIC_API_KEY` 已停止使用。`H3_MUSIC_MODEL_PATH` 现在指向 YuE2 模型目录，不再是单个 ACE-Step 文件。环境变量需由启动环境设置；`.env.example` 只是配置示例。
 
 ## API
 
-POST /v1/music/generations：
+Swagger：`http://127.0.0.1:8000/docs`。可用性见 `GET /v1/models` → `capabilities.music`。缺少模型或依赖时提交返回 HTTP 503，`error.detail` 包含就绪信息；视频模型未安装不妨碍已就绪的音乐功能。
+
+`POST /v1/music/generations`：
 
 ```json
 {
-  "prompt": "upbeat, cheerful acoustic pop, ukulele, bright piano, handclaps, light drums, 118 BPM, instrumental",
-  "lyrics": "",
+  "prompt": "Mandarin, warm piano pop, expressive female voice, acoustic piano, rounded bass, light drums, 88 BPM",
+  "lyrics": "[Verse]\n清晨的风轻轻吹过\n街角传来熟悉的歌\n[Chorus]\n让阳光照亮每个梦\n和你走过春夏秋冬",
   "duration_seconds": 30,
-  "seed": 42
+  "seed": 42,
+  "cot": "full"
 }
 ```
 
-返回 HTTP 202，包含 id、status、queue_number。通过 GET /v1/tasks/{id} 或现有 SSE 接口查询；完成后的 outputs 提供 WAV 下载地址。音频帧网格可能使实际时长比指定值短不到 0.1 秒。
+返回 HTTP 202：
 
-生成歌曲时填写 lyrics，段落标签各占一行，例如：
-
-```text
-[Verse]
-Morning sunshine at my door
-Every step brings something more
-[Chorus]
-Let the music lift us high
-Like a kite across the sky
+```json
+{"id": "任务ID", "status": "queued", "queue_number": 1}
 ```
 
-## 可选：外部 MiniMax Music 3
+| 参数 | 说明 |
+|---|---|
+| `prompt` | 必填，曲风、语言、乐器、情绪、人声与速度描述 |
+| `lyrics` | 默认空；歌曲可用 `[Verse]`、`[Chorus]` 等段落标签 |
+| `duration_seconds` | 10–300，默认 30，输出时长上限 |
+| `seed` | 0–2147483647，默认 7 |
+| `cot` | `full`（默认，旋律和和弦）、`melody`（仅旋律）、`off`（直接生成） |
+| `abc` | 可选 YuE2 格式 ABC 乐谱；与 `cot=off` 不能同时使用 |
+| `cfg_scale` | 可选 0–20，省略或 null 使用模型默认引导强度 |
 
-前一版实现的 Music 3 HTTP 适配器仍可使用，需显式选择：
+时长通过每秒 25 个语义帧的生成预算及最终音频裁切限制，**不保证整首歌或乐句自然结束**。短请求可能只唱出部分歌词。JSON 中的 `truncated.abc`、`truncated.semantic`、`truncated.audio_cropped` 分别标记乐谱、语义采样和音频是否截断。达到预算仍可返回有效音频；请检查这些标记。
 
-```powershell
-$env:H3_MUSIC_BACKEND = "remote"
-$env:H3_MUSIC_BASE_URL = "http://your-music-host:8001"
-# 网关需要认证时配置 H3_MUSIC_API_KEY
+用 `GET /v1/tasks/{id}` 轮询，或 `GET /v1/tasks/{id}/events` 订阅 SSE。成功后 `outputs` 按 WAV、JSON、可选 ABC 的顺序提供 `download_url`。取消使用 `DELETE /v1/tasks/{id}`；队列满返回 429。任务记录在进程内，重启后历史任务 ID 不再可查询。
+
+Python 示例（依赖 `httpx`）：
+
+```python
+import time
+from pathlib import Path
+import httpx
+
+with httpx.Client(base_url="http://127.0.0.1:8000", timeout=90,
+                  headers={"X-API-Key": "替换为密钥；未启用鉴权可删除此项"}) as client:
+    response = client.post("/v1/music/generations", json={
+        "prompt": "Mandarin, warm piano pop, female voice, 88 BPM",
+        "lyrics": "[Verse]\n清晨的风轻轻吹过\n街角传来熟悉的歌",
+        "duration_seconds": 30, "seed": 42, "cot": "full",
+    })
+    response.raise_for_status()
+    task_id = response.json()["id"]
+    while True:
+        response = client.get(f"/v1/tasks/{task_id}")
+        response.raise_for_status()
+        task = response.json()
+        if task["status"] in {"succeeded", "failed", "canceled", "unknown"}:
+            break
+        time.sleep(3)
+    if task["status"] != "succeeded":
+        raise RuntimeError(task.get("error") or task["status"])
+    for artifact in task["outputs"]:
+        response = client.get(artifact["download_url"])
+        response.raise_for_status()
+        Path(artifact["filename"]).write_bytes(response.content)
 ```
 
-按 [MiniMax 官方自部署指南](https://platform.minimax.io/docs/guides/local-deploy-music-3) 部署 SGLang-Omni。可选 H3_MUSIC_MODEL 指定模型 ID，H3_MUSIC_TIMEOUT_SECONDS 默认为 1800 秒。远程模式需填写歌词；API 支持最长 300 秒，输出 32 kHz WAV。上游没有运行中取消和卸载接口，也不提供采样进度。本项目无法释放远程模型显存。
+音乐与视频等共用单 GPU 队列，切换前释放前一个模型。每个音乐任务在独立子进程中执行，完成、失败、取消或超时后结束进程并释放 CUDA 资源。进度为阶段与 token 数估计，不是剩余时间预测。每次任务都包含模型加载和校验时间。
 
-## 来源
+## 版本与许可
 
-- [ACE-Step 项目及许可证](https://github.com/ace-step/ACE-Step)
-- [Comfy 官方音频模型工作流](https://comfyanonymous.github.io/ComfyUI_examples/audio/)
-- [重打包权重](https://huggingface.co/Comfy-Org/ACE-Step_ComfyUI_repackaged)
+- YuE2 代码：`1647252d68b70cbead046ffd3f7caf036dde47ee`（`yue2-infer 0.1.6`）。
+- YuE2-3B 权重：`8f24312f187763b9854adeec87e437e2b03bbff1`。
+- YuE2-Vae 权重：`152733a19ad43aa67e367f9b5503ef8075bb5126`。
+- [官方生成文档](https://github.com/multimodal-art-projection/YuE/blob/1647252d68b70cbead046ffd3f7caf036dde47ee/docs/generation.md)。
+- 代码为 Apache-2.0；当前 YuE2 权重采用 [CC BY-NC 4.0 加创作者额外许可](https://github.com/multimodal-art-projection/YuE/blob/1647252d68b70cbead046ffd3f7caf036dde47ee/MODEL_LICENSE)。个人创作者与企业商业使用的条款不同，企业商用需按官方条款联系授权。
 
-ACE-Step 项目采用 Apache-2.0；部署的模型应同时遵循其模型卡与随附许可。模型下载器不会接受网站协议或运行下载的代码。
+## 本机验证（2026-10-19）
 
-## 本机实测
+Windows / RTX 4070 Ti 12 GB，通过真实 HTTP API 提交中文歌词、30 秒上限、`cot=full`、`seed=42`，57.08 秒完成任务（含模型加载与校验）。下载得到 29.9987 秒、48 kHz、双声道 PCM WAV，以及生成记录和 ABC 乐谱。音频非静音，RMS 约 0.0649；任务结束后 GPU 总显存回落至约 2.1 GB。样例在 `outputs/yue2-smoke-20261019/`，不随源码提交。
 
-RTX 4070 Ti 12GB / Windows 已通过真实 API 生成验证：30 秒请求得到 29.907 秒、44.1 kHz 立体声 WAV，首次任务约 33.63 秒，包含模型加载。完成后模型自动释放。结果见 outputs/music-local-test/REPORT.md。这是单次实测，不代表所有时长和负载的性能。
-
-带歌词测试使用四句英文歌词生成约 30 秒歌曲。独立的本地 Whisper base.en 在未输入参考歌词的情况下识别出全部四句，归一化后均匹配，其中第二句重复一次。该结果验证了这组英文歌词的生效情况，不代表中文歌词或所有曲风都达到同样准确率。音频与识别记录保存在本地 outputs/music-lyrics-test/，不随源码提交。
+该样例的 `truncated.semantic=true`，表示达到时长预算；这不是完整歌曲或歌词准确率测试，也不代表 12 GB 卡能稳定生成所有 300 秒请求。全量 361 项回归测试通过，另外补充了 Windows 就绪输出兼容和进程树终止测试。

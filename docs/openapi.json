@@ -925,8 +925,8 @@
         "tags": [
           "music"
         ],
-        "summary": "Generate instrumental music or a song",
-        "description": "Returns a task ID for the shared queue. Poll /v1/tasks/{id} and download the resulting WAV. Native ACE-Step supports empty lyrics for instrumental music and 10–120 seconds. Remote Music 3 requires lyrics and cannot interrupt running tasks.",
+        "summary": "Generate instrumental music or a song with YuE2",
+        "description": "Returns a task ID for the shared GPU queue. Poll /v1/tasks/{id} for progress and download 48 kHz stereo PCM WAV, generation metadata JSON and an ABC score when planned. duration_seconds is a 10–300 second upper bound and can truncate a phrase; inspect metadata.truncated. Empty lyrics request instrumental music. cot controls symbolic planning. Running tasks can be canceled when H3_ALLOW_INTERRUPT_RUNNING=true.",
         "operationId": "create_music_generation",
         "requestBody": {
           "content": {
@@ -955,6 +955,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1879,7 +1899,7 @@
             "type": "string",
             "maxLength": 20000,
             "title": "Lyrics",
-            "description": "Leave empty for native instrumental music; remote Music 3 requires lyrics.",
+            "description": "Lyrics with [Verse]/[Chorus] sections. Empty lyrics request instrumental music; absence of vocals is not guaranteed.",
             "default": ""
           },
           "duration_seconds": {
@@ -1887,7 +1907,7 @@
             "maximum": 300.0,
             "minimum": 10.0,
             "title": "Duration Seconds",
-            "description": "Maximum duration; output may be shorter.",
+            "description": "Maximum output duration, enforced by the semantic token budget and audio cropping; may truncate a musical phrase.",
             "default": 30
           },
           "seed": {
@@ -1896,6 +1916,45 @@
             "minimum": 0.0,
             "title": "Seed",
             "default": 7
+          },
+          "cot": {
+            "type": "string",
+            "enum": [
+              "full",
+              "melody",
+              "off"
+            ],
+            "title": "Cot",
+            "description": "YuE2 symbolic planning: melody and chords, melody only, or direct generation.",
+            "default": "full"
+          },
+          "abc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abc",
+            "description": "Optional YuE2-compatible ABC score; requires cot=full or melody."
+          },
+          "cfg_scale": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 20.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cfg Scale",
+            "description": "Optional text guidance; null uses YuE2 defaults."
           }
         },
         "additionalProperties": false,
@@ -3052,7 +3111,7 @@
     },
     {
       "name": "music",
-      "description": "Generate music locally with ACE-Step or through an optional self-hosted MiniMax Music 3 service."
+      "description": "Generate songs and instrumental music locally with YuE2, including optional ABC score conditioning."
     },
     {
       "name": "health",

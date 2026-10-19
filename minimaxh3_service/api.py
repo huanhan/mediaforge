@@ -65,7 +65,7 @@ OPENAPI_TAGS = [
     {"name": "beat", "description": "Analyze uploaded music for beats, downbeats, onsets and energy; timestamps are in original-audio seconds."},
     {"name": "pose", "description": "Local DWPose skeleton extraction."},
     {"name": "depth", "description": "Local temporal video depth estimation with Video Depth Anything Small."},
-    {"name": "music", "description": "Generate music locally with ACE-Step or through an optional self-hosted MiniMax Music 3 service."},
+    {"name": "music", "description": "Generate songs and instrumental music locally with YuE2, including optional ABC score conditioning."},
     {"name": "health", "description": "Process health and local runtime readiness."},
     {"name": "models", "description": "Installed models and generation/upscale capabilities."},
     {"name": "files", "description": "Upload source media and download generated artifacts."},
@@ -586,9 +586,10 @@ def create_app(
         return await submit(body)
 
     @router.post("/music/generations", response_model=SubmittedMusicTask, status_code=202,
-                 tags=["music"], summary="Generate instrumental music or a song",
+                 tags=["music"], summary="Generate instrumental music or a song with YuE2",
                  operation_id="create_music_generation",
-                 description="Returns a task ID for the shared queue. Poll /v1/tasks/{id} and download the resulting WAV. Native ACE-Step supports empty lyrics for instrumental music and 10–120 seconds. Remote Music 3 requires lyrics and cannot interrupt running tasks.")
+                 responses={429: BACKEND_ERROR_RESPONSE, 503: BACKEND_ERROR_RESPONSE},
+                 description="Returns a task ID for the shared GPU queue. Poll /v1/tasks/{id} for progress and download 48 kHz stereo PCM WAV, generation metadata JSON and an ABC score when planned. duration_seconds is a 10–300 second upper bound and can truncate a phrase; inspect metadata.truncated. Empty lyrics request instrumental music. cot controls symbolic planning. Running tasks can be canceled when H3_ALLOW_INTERRUPT_RUNNING=true.")
     async def create_music_generation(request: Request, body: MusicRequest) -> SubmittedMusicTask:
         submit = getattr(_backend(request), "submit_music", None)
         if submit is None:

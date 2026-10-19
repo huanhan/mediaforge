@@ -31,9 +31,18 @@ class GenerationMode(StrEnum):
 class MusicRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     prompt: str = Field(min_length=1, max_length=10000, description="Music style, instruments, mood and vocals.")
-    lyrics: str = Field(default="", max_length=20000, description="Leave empty for native instrumental music; remote Music 3 requires lyrics.")
-    duration_seconds: int = Field(default=30, ge=10, le=300, description="Maximum duration; output may be shorter.")
+    lyrics: str = Field(default="", max_length=20000, description="Lyrics with [Verse]/[Chorus] sections. Empty lyrics request instrumental music; absence of vocals is not guaranteed.")
+    duration_seconds: int = Field(default=30, ge=10, le=300, description="Maximum output duration, enforced by the semantic token budget and audio cropping; may truncate a musical phrase.")
     seed: int = Field(default=7, ge=0, le=2147483647)
+    cot: Literal["full", "melody", "off"] = Field(default="full", description="YuE2 symbolic planning: melody and chords, melody only, or direct generation.")
+    abc: str | None = Field(default=None, min_length=1, max_length=50000, description="Optional YuE2-compatible ABC score; requires cot=full or melody.")
+    cfg_scale: float | None = Field(default=None, ge=0, le=20, allow_inf_nan=False, description="Optional text guidance; null uses YuE2 defaults.")
+
+    @model_validator(mode="after")
+    def validate_score(self):
+        if self.abc is not None and self.cot == "off":
+            raise ValueError("abc requires cot=full or cot=melody")
+        return self
 
 
 class SubmittedMusicTask(BaseModel):

@@ -433,7 +433,8 @@ class LocalTaskManager:
                 self.depth_runner.process, record.payload, record.output, record.cancel, progress)
             return
         if record.kind == "music":
-            await asyncio.to_thread(self.music_runner.generate, record.payload, record.output, record.cancel, progress)
+            outputs = await asyncio.to_thread(self.music_runner.generate, record.payload, record.output, record.cancel, progress)
+            record.task.outputs = outputs or [record.output]
             return
         if record.kind == "removal":
             record.task.outputs = await asyncio.to_thread(
@@ -497,7 +498,7 @@ class LocalTaskManager:
                     raise GenerationCanceled("task canceled")
                 record.task.status = "succeeded"
                 record.task.progress = 1.0
-                if record.kind not in {"removal", "depth", "skeleton", "transcription", "alignment"}:
+                if record.kind not in {"removal", "depth", "skeleton", "transcription", "alignment", "music"}:
                     record.task.outputs = [record.output]
             except GenerationCanceled:
                 record.output.path.unlink(missing_ok=True)

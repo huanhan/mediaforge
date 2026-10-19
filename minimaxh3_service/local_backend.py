@@ -18,7 +18,6 @@ from .storage import LocalAssetStore
 from .tasks import H3Runner, LocalTaskManager, UpscaleRunner
 from .upscale import SeedVR2UpscaleRunner
 from .music import MusicRunner
-from .native_music import NativeMusicRunner
 from .models import MusicRequest, SubmittedMusicTask
 from .models import DepthRequest, SubmittedDepthTask
 from .depth import VideoDepthRunner
@@ -76,8 +75,7 @@ class LocalGenerationBackend:
             upscale_output_factory=self.assets.upscale_output_path,
             upscale_idle_release_seconds=settings.upscale_idle_release_seconds,
             removal_runner=removal_runner or VideoRemovalRunner(settings, self.assets.resolve_input),
-            music_runner=music_runner or (NativeMusicRunner(settings, self.runner)
-                                         if settings.music_backend == "native" else MusicRunner(settings)),
+            music_runner=music_runner or MusicRunner(settings),
             music_output_factory=self.assets.music_output_path,
             depth_runner=depth_runner or VideoDepthRunner(settings, self.assets.resolve_input),
             skeleton_runner=skeleton_runner or SkeletonRunner(settings, self.assets.resolve_input),
