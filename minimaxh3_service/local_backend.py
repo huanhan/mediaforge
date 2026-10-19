@@ -24,6 +24,8 @@ from .models import DepthRequest, SubmittedDepthTask
 from .depth import VideoDepthRunner
 from .skeleton import SkeletonRunner
 from .models import SkeletonRequest, SubmittedSkeletonTask
+from .models import AUDIO_EXTENSIONS, BeatAnalysisRequest, SubmittedBeatAnalysisTask
+from .beat import BeatAnalysisRunner
 
 
 def source_canvas(width: int, height: int) -> tuple[int, int]:
@@ -45,6 +47,7 @@ class LocalGenerationBackend:
         music_runner=None,
         depth_runner=None,
         skeleton_runner=None,
+        beat_runner=None,
     ) -> None:
         self.settings = settings
         self.assets = LocalAssetStore(
@@ -72,6 +75,7 @@ class LocalGenerationBackend:
             music_output_factory=self.assets.music_output_path,
             depth_runner=depth_runner or VideoDepthRunner(settings, self.assets.resolve_input),
             skeleton_runner=skeleton_runner or SkeletonRunner(settings, self.assets.resolve_input),
+            beat_runner=beat_runner or BeatAnalysisRunner(settings, self.assets.resolve_input),
         )
 
     async def start(self) -> None:
@@ -88,6 +92,7 @@ class LocalGenerationBackend:
         readiness["music"] = await asyncio.to_thread(self.tasks.music_runner.readiness)
         readiness["depth"] = self.tasks.depth_runner.readiness()
         readiness["skeleton"] = self.tasks.skeleton_runner.readiness()
+        readiness["beat_analysis"] = self.tasks.beat_runner.readiness()
         return readiness
 
     async def upload(
@@ -211,6 +216,16 @@ class LocalGenerationBackend:
         if readiness.get("status") != "ready":
             raise BackendError("Local DWPose is not installed", status_code=503, code="skeleton_not_ready", detail=readiness)
         return await self.tasks.submit_skeleton(request)
+
+    async def submit_beat_analysis(self, request: BeatAnalysisRequest) -> SubmittedBeatAnalysisTask:
+        source = self.assets.resolve_input(request.file_id)
+        if source.suffix.lower() not in AUDIO_EXTENSIONS:
+            raise BackendError("beat analysis requires uploaded audio", status_code=415, code="invalid_audio")
+        readiness = self.tasks.beat_runner.readiness()
+        if readiness.get("status") != "ready":
+            raise BackendError("Beat analysis is not installed; see docs/BEAT_ANALYSIS.md",
+                               status_code=503, code="beat_analysis_not_ready", detail=readiness)
+        return await self.tasks.submit_beat_analysis(request)
 
     async def get_task(self, task_id: str) -> BackendTask | None:
         return self.tasks.get(task_id)

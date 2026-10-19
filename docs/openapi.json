@@ -530,6 +530,76 @@
         ]
       }
     },
+    "/v1/music/analyses": {
+      "post": {
+        "tags": [
+          "beat"
+        ],
+        "summary": "Analyze music timing for video editing",
+        "description": "Upload audio with POST /v1/files (kind=audio), then submit its file_id. Uses the shared task queue. Poll /v1/tasks/{id}, then download the JSON from outputs[].download_url. No transcription or lyric alignment is performed.",
+        "operationId": "create_beat_analysis",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BeatAnalysisRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmittedBeatAnalysisTask"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/depths": {
       "post": {
         "tags": [
@@ -1211,6 +1281,30 @@
   },
   "components": {
     "schemas": {
+      "BeatAnalysisRequest": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "File Id",
+            "description": "Audio uploaded through POST /v1/files with kind=audio."
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Title",
+            "description": "Optional song title; does not affect detected timing.",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "file_id"
+        ],
+        "title": "BeatAnalysisRequest"
+      },
       "Body_upload_file": {
         "properties": {
           "kind": {
@@ -2045,6 +2139,30 @@
         ],
         "title": "SourceVideo"
       },
+      "SubmittedBeatAnalysisTask": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "const": "queued",
+            "title": "Status",
+            "default": "queued"
+          },
+          "queue_number": {
+            "type": "integer",
+            "title": "Queue Number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "queue_number"
+        ],
+        "title": "SubmittedBeatAnalysisTask"
+      },
       "SubmittedDepthTask": {
         "properties": {
           "id": {
@@ -2262,7 +2380,8 @@
                   "removal",
                   "music",
                   "depth",
-                  "skeleton"
+                  "skeleton",
+                  "beat_analysis"
                 ]
               },
               {
@@ -2664,6 +2783,10 @@
     }
   },
   "tags": [
+    {
+      "name": "beat",
+      "description": "Analyze uploaded music for beats, downbeats, onsets and energy; timestamps are in original-audio seconds."
+    },
     {
       "name": "pose",
       "description": "Local DWPose skeleton extraction."

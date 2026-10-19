@@ -42,6 +42,23 @@ class SubmittedMusicTask(BaseModel):
     queue_number: int
 
 
+class BeatAnalysisRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    file_id: FileId = Field(description="Audio uploaded through POST /v1/files with kind=audio.")
+    title: str = Field(default="", max_length=200, description="Optional song title; does not affect detected timing.")
+
+    @field_validator("file_id")
+    @classmethod
+    def safe_file_id(cls, value: str) -> str:
+        return validate_file_id(value)
+
+
+class SubmittedBeatAnalysisTask(BaseModel):
+    id: str
+    status: Literal["queued"] = "queued"
+    queue_number: int
+
+
 class SourceVideo(BaseModel):
     model_config = ConfigDict(extra="forbid")
     file_id: FileId
@@ -487,7 +504,7 @@ class OutputFile(BaseModel):
 
 class TaskStatus(BaseModel):
     id: str = Field(description="Task identifier.")
-    kind: Literal["generation", "upscale", "removal", "music", "depth", "skeleton"] | None = Field(
+    kind: Literal["generation", "upscale", "removal", "music", "depth", "skeleton", "beat_analysis"] | None = Field(
         default=None,
         description="Task type. All types use the same status endpoints.",
     )

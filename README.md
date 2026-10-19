@@ -6,6 +6,8 @@
 
 支持：
 
+- `POST /v1/music/analyses`：分析上传音乐的拍点、小节第一拍、能量和起音，输出 JSON；Node.js 通过现有任务 API 调用，见 [节奏分析说明](docs/BEAT_ANALYSIS.md)
+
 - `POST /v1/depths`：本地 Video Depth Anything Small 视频转深度，输出灰度 MP4 和可选 float32 NPZ，见 [安装与接口说明](docs/DEPTH.md)
 - `POST /v1/poses`：本地 DWPose 视频骨骼提取，只输出骨骼可视化 MP4，见 [安装与接口说明](docs/SKELETON.md)
 - `music`：本机 ACE-Step 按曲风生成纯音乐或歌曲，提供试听与 WAV 下载；也可选接远程 MiniMax Music 3，见 [音乐生成说明](docs/MUSIC.md)

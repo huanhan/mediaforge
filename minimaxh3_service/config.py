@@ -43,6 +43,11 @@ class Settings:
     pose_model_path: Path = Path("models/pose")
     pose_max_frames: int = 240
     pose_timeout_seconds: float = 3600.0
+    beat_model_path: Path = Path("models/beat/final0.ckpt")
+    beat_device: str = "cpu"
+    beat_max_seconds: float = 900.0
+    beat_timeout_seconds: float = 600.0
+    beat_cpu_threads: int = 4
     reserve_vram_gb: float = 1.0
     vram_mode: str = "dynamic"
     enable_acceleration_lora: bool = True
@@ -70,6 +75,15 @@ class Settings:
     upscale_seed: int = 42
 
     def __post_init__(self) -> None:
+        if self.beat_device != "cpu" and self.beat_device != "cuda" and not (
+            self.beat_device.startswith("cuda:") and self.beat_device[5:].isdigit()
+        ):
+            raise ValueError("H3_BEAT_DEVICE must be cpu or cuda[:index]")
+        if not 1 <= self.beat_cpu_threads <= 64:
+            raise ValueError("H3_BEAT_CPU_THREADS must be between 1 and 64")
+        for name, value in (("MAX_SECONDS", self.beat_max_seconds), ("TIMEOUT_SECONDS", self.beat_timeout_seconds)):
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f"H3_BEAT_{name} must be finite and positive")
         if self.pose_max_frames < 2:
             raise ValueError("H3_POSE_MAX_FRAMES must be at least 2")
         if not math.isfinite(self.pose_timeout_seconds) or self.pose_timeout_seconds <= 0:
@@ -97,6 +111,11 @@ class Settings:
         defaults = cls()
         max_upload_mb = int(os.getenv("H3_MAX_UPLOAD_MB", "2048"))
         return cls(
+            beat_model_path=Path(os.getenv("H3_BEAT_MODEL_PATH", str(defaults.beat_model_path))),
+            beat_device=os.getenv("H3_BEAT_DEVICE", defaults.beat_device),
+            beat_max_seconds=float(os.getenv("H3_BEAT_MAX_SECONDS", str(defaults.beat_max_seconds))),
+            beat_timeout_seconds=float(os.getenv("H3_BEAT_TIMEOUT_SECONDS", str(defaults.beat_timeout_seconds))),
+            beat_cpu_threads=int(os.getenv("H3_BEAT_CPU_THREADS", str(defaults.beat_cpu_threads))),
             pose_runtime_path=Path(os.getenv("H3_POSE_RUNTIME_PATH", str(defaults.pose_runtime_path))),
             pose_model_path=Path(os.getenv("H3_POSE_MODEL_PATH", str(defaults.pose_model_path))),
             pose_max_frames=int(os.getenv("H3_POSE_MAX_FRAMES", str(defaults.pose_max_frames))),

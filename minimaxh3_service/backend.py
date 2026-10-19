@@ -10,10 +10,11 @@ from .models import GenerationRequest, VideoEditRequest, UpscaleRequest, Removal
 from .models import MusicRequest, SubmittedMusicTask
 from .models import DepthRequest, SubmittedDepthTask
 from .models import SkeletonRequest, SubmittedSkeletonTask
+from .models import BeatAnalysisRequest, SubmittedBeatAnalysisTask
 
 
 TaskState = Literal["queued", "running", "succeeded", "failed", "canceled", "unknown"]
-TaskKind = Literal["generation", "upscale", "removal", "music", "depth", "skeleton"]
+TaskKind = Literal["generation", "upscale", "removal", "music", "depth", "skeleton", "beat_analysis"]
 
 
 class BackendError(RuntimeError):
@@ -103,6 +104,8 @@ class GenerationBackend(Protocol):
     async def submit_depth(self, request: DepthRequest) -> SubmittedDepthTask: ...
 
     async def submit_skeleton(self, request: SkeletonRequest) -> SubmittedSkeletonTask: ...
+
+    async def submit_beat_analysis(self, request: BeatAnalysisRequest) -> SubmittedBeatAnalysisTask: ...
 
     async def get_task(self, task_id: str) -> BackendTask | None: ...
 

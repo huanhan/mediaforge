@@ -32,6 +32,7 @@ from .backend import BackendError, BackendTask, GenerationBackend
 from .config import Settings
 from .local_backend import LocalGenerationBackend
 from .models import DepthRequest, SubmittedDepthTask, SkeletonRequest, SubmittedSkeletonTask
+from .models import BeatAnalysisRequest, SubmittedBeatAnalysisTask
 from .models import (
     AUDIO_EXTENSIONS,
     MusicRequest,
@@ -59,6 +60,7 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 OPENAPI_TAGS = [
+    {"name": "beat", "description": "Analyze uploaded music for beats, downbeats, onsets and energy; timestamps are in original-audio seconds."},
     {"name": "pose", "description": "Local DWPose skeleton extraction."},
     {"name": "depth", "description": "Local temporal video depth estimation with Video Depth Anything Small."},
     {"name": "music", "description": "Generate music locally with ACE-Step or through an optional self-hosted MiniMax Music 3 service."},
@@ -319,6 +321,9 @@ def create_app(
                              "available": readiness.get("skeleton", {}).get("status") == "ready",
                              "endpoint": "/v1/poses", "outputs": ["skeleton"]},
                 "removal": readiness.get("removal", {"status": "not_ready"}),
+                "beat_analysis": {**readiness.get("beat_analysis", {"status": "not_ready"}),
+                                  "available": readiness.get("beat_analysis", {}).get("status") == "ready",
+                                  "endpoint": "/v1/music/analyses", "format": "json"},
                 "depth": {**readiness.get("depth", {"status": "not_ready"}),
                           "available": readiness.get("depth", {}).get("status") == "ready",
                           "endpoint": "/v1/depths"},
@@ -517,6 +522,17 @@ def create_app(
             width=submitted.width,
             height=submitted.height,
         )
+
+    @router.post("/music/analyses", response_model=SubmittedBeatAnalysisTask, status_code=202,
+                 tags=["beat"], summary="Analyze music timing for video editing",
+                 operation_id="create_beat_analysis",
+                 description="Upload audio with POST /v1/files (kind=audio), then submit its file_id. Uses the shared task queue. Poll /v1/tasks/{id}, then download the JSON from outputs[].download_url. No transcription or lyric alignment is performed.",
+                 responses={503: BACKEND_ERROR_RESPONSE})
+    async def create_beat_analysis(request: Request, body: BeatAnalysisRequest) -> SubmittedBeatAnalysisTask:
+        submit = getattr(_backend(request), "submit_beat_analysis", None)
+        if submit is None:
+            raise HTTPException(status_code=503, detail="Beat analysis is not configured")
+        return await submit(body)
 
     @router.post("/depths", response_model=SubmittedDepthTask, status_code=202,
                  tags=["depth"], summary="Convert a video to relative inverse depth",
