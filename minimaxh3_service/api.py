@@ -33,6 +33,7 @@ from .config import Settings
 from .local_backend import LocalGenerationBackend
 from .models import DepthRequest, SubmittedDepthTask, SkeletonRequest, SubmittedSkeletonTask
 from .models import BeatAnalysisRequest, SubmittedBeatAnalysisTask
+from .models import TranscriptionRequest, SubmittedTranscriptionTask
 from .models import (
     AUDIO_EXTENSIONS,
     MusicRequest,
@@ -60,6 +61,7 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 OPENAPI_TAGS = [
+    {"name": "transcription", "description": "Local Qwen3-ASR song and speech transcription. Text output; no forced lyric alignment."},
     {"name": "beat", "description": "Analyze uploaded music for beats, downbeats, onsets and energy; timestamps are in original-audio seconds."},
     {"name": "pose", "description": "Local DWPose skeleton extraction."},
     {"name": "depth", "description": "Local temporal video depth estimation with Video Depth Anything Small."},
@@ -321,6 +323,9 @@ def create_app(
                              "available": readiness.get("skeleton", {}).get("status") == "ready",
                              "endpoint": "/v1/poses", "outputs": ["skeleton"]},
                 "removal": readiness.get("removal", {"status": "not_ready"}),
+                "transcription": {**readiness.get("transcription", {"status": "not_ready"}),
+                                  "available": readiness.get("transcription", {}).get("status") == "ready",
+                                  "endpoint": "/v1/audio/transcriptions", "outputs": ["json", "txt"]},
                 "beat_analysis": {**readiness.get("beat_analysis", {"status": "not_ready"}),
                                   "available": readiness.get("beat_analysis", {}).get("status") == "ready",
                                   "endpoint": "/v1/music/analyses", "format": "json"},
@@ -522,6 +527,17 @@ def create_app(
             width=submitted.width,
             height=submitted.height,
         )
+
+    @router.post("/audio/transcriptions", response_model=SubmittedTranscriptionTask, status_code=202,
+                 tags=["transcription"], summary="Transcribe a song or speech with local Qwen3-ASR",
+                 operation_id="create_transcription",
+                 description="Upload audio via POST /v1/files, then submit its file_id as JSON. Uses the shared GPU task queue. Poll /v1/tasks/{id} and download JSON and TXT outputs. Input chunk boundaries are not sentence/word timestamps. This endpoint does not align provided lyrics.",
+                 responses={503: BACKEND_ERROR_RESPONSE})
+    async def create_transcription(request: Request, body: TranscriptionRequest) -> SubmittedTranscriptionTask:
+        submit = getattr(_backend(request), "submit_transcription", None)
+        if submit is None:
+            raise HTTPException(status_code=503, detail="Transcription is not configured")
+        return await submit(body)
 
     @router.post("/music/analyses", response_model=SubmittedBeatAnalysisTask, status_code=202,
                  tags=["beat"], summary="Analyze music timing for video editing",

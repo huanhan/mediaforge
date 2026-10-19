@@ -12,6 +12,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+asr = [
+    "transformers>=5.13,<6",
+    "torch>=2.8,<2.9",
+    "numpy>=1.26,<3",
+    "accelerate>=1,<2",
+    "huggingface-hub>=1,<2",
+]
 beat = [
     "beat-this==1.1.0",
     "numpy>=1.26,<3",
@@ -93,6 +100,7 @@ minimaxh3-setup-music = "minimaxh3_service.setup_music:main"
 minimaxh3-setup-depth = "minimaxh3_service.setup_depth:main"
 minimaxh3-setup-pose = "minimaxh3_service.setup_pose:main"
 minimaxh3-setup-beat = "minimaxh3_service.setup_beat:main"
+minimaxh3-setup-asr = "minimaxh3_service.setup_asr:main"
 minimaxh3-openapi = "minimaxh3_service.export_openapi:main"
 minimaxh3-ui = "minimaxh3_service.ui:main"
 

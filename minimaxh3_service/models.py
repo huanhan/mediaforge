@@ -59,6 +59,26 @@ class SubmittedBeatAnalysisTask(BaseModel):
     queue_number: int
 
 
+class TranscriptionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    file_id: FileId = Field(description="Uploaded audio file_id; no external URLs or local absolute paths.")
+    title: str = Field(default="", max_length=200, description="Optional song title stored as metadata only.")
+    language: Literal["auto", "zh", "en", "yue", "ja", "ko"] = "zh"
+    chunk_seconds: int = Field(default=180, ge=30, le=180,
+                               description="Maximum input window. Boundaries are NOT lyric timestamps.")
+
+    @field_validator("file_id")
+    @classmethod
+    def safe_file_id(cls, value: str) -> str:
+        return validate_file_id(value)
+
+
+class SubmittedTranscriptionTask(BaseModel):
+    id: str
+    status: Literal["queued"] = "queued"
+    queue_number: int
+
+
 class SourceVideo(BaseModel):
     model_config = ConfigDict(extra="forbid")
     file_id: FileId
@@ -504,7 +524,7 @@ class OutputFile(BaseModel):
 
 class TaskStatus(BaseModel):
     id: str = Field(description="Task identifier.")
-    kind: Literal["generation", "upscale", "removal", "music", "depth", "skeleton", "beat_analysis"] | None = Field(
+    kind: Literal["generation", "upscale", "removal", "music", "depth", "skeleton", "beat_analysis", "transcription"] | None = Field(
         default=None,
         description="Task type. All types use the same status endpoints.",
     )

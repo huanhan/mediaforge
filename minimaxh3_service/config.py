@@ -48,6 +48,11 @@ class Settings:
     beat_max_seconds: float = 900.0
     beat_timeout_seconds: float = 600.0
     beat_cpu_threads: int = 4
+    asr_model_path: Path = Path("models/asr/Qwen3-ASR-1.7B")
+    asr_device: str = "cuda"
+    asr_max_seconds: float = 900.0
+    asr_timeout_seconds: float = 1800.0
+    asr_cpu_threads: int = 4
     reserve_vram_gb: float = 1.0
     vram_mode: str = "dynamic"
     enable_acceleration_lora: bool = True
@@ -75,6 +80,15 @@ class Settings:
     upscale_seed: int = 42
 
     def __post_init__(self) -> None:
+        if self.asr_device != "cpu" and self.asr_device != "cuda" and not (
+            self.asr_device.startswith("cuda:") and self.asr_device[5:].isdigit()
+        ):
+            raise ValueError("H3_ASR_DEVICE must be cpu or cuda[:index]")
+        if not 1 <= self.asr_cpu_threads <= 64:
+            raise ValueError("H3_ASR_CPU_THREADS must be between 1 and 64")
+        for name, value in (("MAX_SECONDS", self.asr_max_seconds), ("TIMEOUT_SECONDS", self.asr_timeout_seconds)):
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f"H3_ASR_{name} must be finite and positive")
         if self.beat_device != "cpu" and self.beat_device != "cuda" and not (
             self.beat_device.startswith("cuda:") and self.beat_device[5:].isdigit()
         ):
@@ -111,6 +125,11 @@ class Settings:
         defaults = cls()
         max_upload_mb = int(os.getenv("H3_MAX_UPLOAD_MB", "2048"))
         return cls(
+            asr_model_path=Path(os.getenv("H3_ASR_MODEL_PATH", str(defaults.asr_model_path))),
+            asr_device=os.getenv("H3_ASR_DEVICE", defaults.asr_device),
+            asr_max_seconds=float(os.getenv("H3_ASR_MAX_SECONDS", str(defaults.asr_max_seconds))),
+            asr_timeout_seconds=float(os.getenv("H3_ASR_TIMEOUT_SECONDS", str(defaults.asr_timeout_seconds))),
+            asr_cpu_threads=int(os.getenv("H3_ASR_CPU_THREADS", str(defaults.asr_cpu_threads))),
             beat_model_path=Path(os.getenv("H3_BEAT_MODEL_PATH", str(defaults.beat_model_path))),
             beat_device=os.getenv("H3_BEAT_DEVICE", defaults.beat_device),
             beat_max_seconds=float(os.getenv("H3_BEAT_MAX_SECONDS", str(defaults.beat_max_seconds))),

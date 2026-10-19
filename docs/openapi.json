@@ -530,6 +530,76 @@
         ]
       }
     },
+    "/v1/audio/transcriptions": {
+      "post": {
+        "tags": [
+          "transcription"
+        ],
+        "summary": "Transcribe a song or speech with local Qwen3-ASR",
+        "description": "Upload audio via POST /v1/files, then submit its file_id as JSON. Uses the shared GPU task queue. Poll /v1/tasks/{id} and download JSON and TXT outputs. Input chunk boundaries are not sentence/word timestamps. This endpoint does not align provided lyrics.",
+        "operationId": "create_transcription",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranscriptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmittedTranscriptionTask"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/music/analyses": {
       "post": {
         "tags": [
@@ -2316,6 +2386,30 @@
         ],
         "title": "SubmittedTask"
       },
+      "SubmittedTranscriptionTask": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "const": "queued",
+            "title": "Status",
+            "default": "queued"
+          },
+          "queue_number": {
+            "type": "integer",
+            "title": "Queue Number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "queue_number"
+        ],
+        "title": "SubmittedTranscriptionTask"
+      },
       "SubmittedUpscaleTask": {
         "properties": {
           "id": {
@@ -2381,7 +2475,8 @@
                   "music",
                   "depth",
                   "skeleton",
-                  "beat_analysis"
+                  "beat_analysis",
+                  "transcription"
                 ]
               },
               {
@@ -2462,6 +2557,51 @@
           "status"
         ],
         "title": "TaskStatus"
+      },
+      "TranscriptionRequest": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "File Id",
+            "description": "Uploaded audio file_id; no external URLs or local absolute paths."
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Title",
+            "description": "Optional song title stored as metadata only.",
+            "default": ""
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "zh",
+              "en",
+              "yue",
+              "ja",
+              "ko"
+            ],
+            "title": "Language",
+            "default": "zh"
+          },
+          "chunk_seconds": {
+            "type": "integer",
+            "maximum": 180.0,
+            "minimum": 30.0,
+            "title": "Chunk Seconds",
+            "description": "Maximum input window. Boundaries are NOT lyric timestamps.",
+            "default": 180
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "file_id"
+        ],
+        "title": "TranscriptionRequest"
       },
       "UploadedFile": {
         "properties": {
@@ -2783,6 +2923,10 @@
     }
   },
   "tags": [
+    {
+      "name": "transcription",
+      "description": "Local Qwen3-ASR song and speech transcription. Text output; no forced lyric alignment."
+    },
     {
       "name": "beat",
       "description": "Analyze uploaded music for beats, downbeats, onsets and energy; timestamps are in original-audio seconds."

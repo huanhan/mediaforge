@@ -6,6 +6,7 @@
 
 支持：
 
+- `POST /v1/audio/transcriptions`：本地 Qwen3-ASR-1.7B 歌词/语音识别，输出 TXT 与 JSON，含 Node.js 调用脚本，见 [安装与接口说明](docs/TRANSCRIPTION.md)
 - `POST /v1/music/analyses`：分析上传音乐的拍点、小节第一拍、能量和起音，输出 JSON；Node.js 通过现有任务 API 调用，见 [节奏分析说明](docs/BEAT_ANALYSIS.md)
 
 - `POST /v1/depths`：本地 Video Depth Anything Small 视频转深度，输出灰度 MP4 和可选 float32 NPZ，见 [安装与接口说明](docs/DEPTH.md)

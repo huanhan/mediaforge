@@ -26,6 +26,8 @@ from .skeleton import SkeletonRunner
 from .models import SkeletonRequest, SubmittedSkeletonTask
 from .models import AUDIO_EXTENSIONS, BeatAnalysisRequest, SubmittedBeatAnalysisTask
 from .beat import BeatAnalysisRunner
+from .models import TranscriptionRequest, SubmittedTranscriptionTask
+from .transcription import TranscriptionRunner
 
 
 def source_canvas(width: int, height: int) -> tuple[int, int]:
@@ -48,6 +50,7 @@ class LocalGenerationBackend:
         depth_runner=None,
         skeleton_runner=None,
         beat_runner=None,
+        transcription_runner=None,
     ) -> None:
         self.settings = settings
         self.assets = LocalAssetStore(
@@ -76,6 +79,7 @@ class LocalGenerationBackend:
             depth_runner=depth_runner or VideoDepthRunner(settings, self.assets.resolve_input),
             skeleton_runner=skeleton_runner or SkeletonRunner(settings, self.assets.resolve_input),
             beat_runner=beat_runner or BeatAnalysisRunner(settings, self.assets.resolve_input),
+            transcription_runner=transcription_runner or TranscriptionRunner(settings, self.assets.resolve_input),
         )
 
     async def start(self) -> None:
@@ -93,6 +97,7 @@ class LocalGenerationBackend:
         readiness["depth"] = self.tasks.depth_runner.readiness()
         readiness["skeleton"] = self.tasks.skeleton_runner.readiness()
         readiness["beat_analysis"] = self.tasks.beat_runner.readiness()
+        readiness["transcription"] = self.tasks.transcription_runner.readiness()
         return readiness
 
     async def upload(
@@ -226,6 +231,16 @@ class LocalGenerationBackend:
             raise BackendError("Beat analysis is not installed; see docs/BEAT_ANALYSIS.md",
                                status_code=503, code="beat_analysis_not_ready", detail=readiness)
         return await self.tasks.submit_beat_analysis(request)
+
+    async def submit_transcription(self, request: TranscriptionRequest) -> SubmittedTranscriptionTask:
+        source = self.assets.resolve_input(request.file_id)
+        if source.suffix.lower() not in AUDIO_EXTENSIONS:
+            raise BackendError("transcription requires uploaded audio", status_code=415, code="invalid_audio")
+        readiness = self.tasks.transcription_runner.readiness()
+        if readiness.get("status") != "ready":
+            raise BackendError("Qwen3-ASR is not installed; see docs/TRANSCRIPTION.md",
+                               status_code=503, code="transcription_not_ready", detail=readiness)
+        return await self.tasks.submit_transcription(request)
 
     async def get_task(self, task_id: str) -> BackendTask | None:
         return self.tasks.get(task_id)
