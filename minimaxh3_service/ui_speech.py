@@ -40,7 +40,6 @@ def add_speech_ui(client):
     with gr.Row():
         with gr.Column():
             text = gr.Textbox(label="要说的话", lines=4, max_length=1000, value="[笑] 你好，欢迎来到我的频道。")
-            gr.Examples([[s] for s in ["[笑] 太好了，我们终于做到了！", "[叹气] 没想到，你还记得我。", "[咳嗽] 不好意思，我们继续。", "[清嗓子] 各位，我有件事要说。", "(laugh) We did it!", "(sigh) You still remember me.", "(cough) Excuse me.", "(clears throat) Let us begin."]], inputs=[text], label="声音效果示例 · 点击填入")
             source = gr.Dropdown([("参考音色 · 复刻声音", "reference"), ("文字设计 · 无需参考音频", "design")], value="reference", label="声音来源")
             with gr.Column() as references:
                 speaker = gr.Dropdown(list(SPEAKERS), value="Serena", label="预置参考音色")
