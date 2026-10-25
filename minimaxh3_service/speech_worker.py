@@ -2,26 +2,28 @@
 import argparse
 import json
 from pathlib import Path
-import re
 
-def chunks(text, limit=100):
-    parts = []
-    current = ""
-    for sentence in re.findall(r"[^。！？!?；;\n]+[。！？!?；;\n]*|[。！？!?；;\n]+", text):
-        while len(sentence) > limit:
-            if current:
-                parts.append(current); current = ""
-            split = max(sentence.rfind("，", 0, limit), sentence.rfind(",", 0, limit), sentence.rfind(" ", 0, limit))
-            cut = split + 1 if split > limit // 2 else limit
-            parts.append(sentence[:cut]); sentence = sentence[cut:]
-        if len(current) + len(sentence) > limit and current:
-            parts.append(current); current = ""
-        current += sentence
-    if current.strip():
-        parts.append(current)
-    return parts
+def inference_options(request):
+    mode = request.get("emotion_mode", "text")
+    return dict(
+        spk_audio_prompt=request["reference_audio"], text=request["text"],
+        emo_audio_prompt=request.get("emotion_reference_audio") if mode == "reference" else None,
+        emo_alpha=float(request.get("emotion_strength", 0.65)),
+        emo_vector=request.get("emotion_vector") if mode == "vector" else None,
+        use_emo_text=mode == "text", emo_text=request.get("emotion_text"),
+        use_random=False, duration_factor=1 / request.get("speed", 1),
+        interval_silence=request.get("pause_ms", 200),
+        max_text_tokens_per_segment=request.get("max_segment_tokens", 120),
+        temperature=float(request.get("temperature", 0.8)), top_p=float(request.get("top_p", 0.8)),
+        top_k=request.get("top_k", 30), repetition_penalty=float(request.get("repetition_penalty", 10)),
+        text_normalization=request.get("text_normalization", True),
+        max_mel_tokens=1500, verbose=False,
+    )
 
 def main():
+    import sys
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--device", default="cuda")
@@ -30,10 +32,15 @@ def main():
     parser.add_argument("--output")
     parser.add_argument("--progress")
     args = parser.parse_args()
+    import os
+    import random
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"
+    os.environ["MODELSCOPE_OFFLINE"] = "1"
     import torch
     import numpy as np
     import soundfile as sf
-    from qwen_tts import Qwen3TTSModel
+    from indextts.infer_v2_5 import IndexTTS2
     if args.check:
         available = args.device == "cpu" or torch.cuda.is_available()
         print(json.dumps({"status": "ready" if available else "not_ready", "reason": "" if available else "CUDA unavailable"}))
@@ -41,33 +48,30 @@ def main():
     request = json.loads(Path(args.request).read_text(encoding="utf-8"))
     torch.set_num_threads(4)
     torch.manual_seed(request["seed"])
+    np.random.seed(request["seed"])
+    random.seed(request["seed"])
     progress = lambda value: Path(args.progress).write_text(json.dumps({"progress": value}), encoding="utf-8")
     progress(.08)
-    model = Qwen3TTSModel.from_pretrained(args.model_dir, device_map=args.device, local_files_only=True,
-        dtype=torch.float32 if args.device == "cpu" else torch.bfloat16, attn_implementation="sdpa")
+    model = IndexTTS2(cfg_path=str(Path(args.model_dir) / "config.yaml"), model_dir=args.model_dir,
+                     device=args.device, use_bf16=args.device != "cpu", use_cuda_kernel=False,
+                     use_deepspeed=False, use_accel=False, use_torch_compile=False,
+                     use_qwen_emo=request.get("emotion_mode", "text") == "text")
     progress(.20)
-    clone = None
-    if request.get("reference_audio"):
-        clone = model.create_voice_clone_prompt(ref_audio=request["reference_audio"],
-                    ref_text=request["reference_text"], x_vector_only_mode=False)
-    pieces = chunks(request["text"])
-    waves = []
+    languages = {"Chinese": "ZH", "English": "EN", "Japanese": "JA", "Spanish": "ES", "Arabic": "AR"}
+    language = request["language"]
+    if language == "Auto":
+        import langid
+        langid.set_languages(["zh", "en", "ja", "es", "ar"])
+        lang = langid.classify(request["text"])[0].upper()
+    else:
+        lang = languages[language]
+    model.gr_progress = lambda value, desc=None: progress(.20 + .72 * max(0, min(1, float(value))))
     with torch.inference_mode():
-        for index, text in enumerate(pieces):
-            common = dict(text=text, language=request["language"], max_new_tokens=2048)
-            if clone is not None:
-                audio, sr = model.generate_voice_clone(**common, voice_clone_prompt=clone)
-            else:
-                audio, sr = model.generate_custom_voice(**common, speaker=request["speaker"], instruct=request["instruct"])
-            wave = np.asarray(audio[0], dtype=np.float32).reshape(-1)
-            # Hitting the generation budget can silently cut a sentence. Do not publish it.
-            if not np.isfinite(wave).all() or len(wave) == 0 or len(wave) / sr >= 160:
-                raise RuntimeError("Speech was empty, invalid, or hit the generation limit; shorten this shot's text")
-            waves.append(wave)
-            if index < len(pieces) - 1:
-                waves.append(np.zeros(round(sr * .12), dtype=np.float32))
-            progress(.20 + .72 * (index + 1) / len(pieces))
-    sf.write(args.output, np.concatenate(waves), sr, subtype="PCM_16")
+        model.infer(**inference_options(request), output_path=args.output, lang=lang)
+    wave, sr = sf.read(args.output, dtype="float32")
+    if not np.isfinite(wave).all() or wave.size == 0 or len(wave) / sr > 600 or np.max(np.abs(wave)) < 0.0001:
+        raise RuntimeError("IndexTTS returned empty, silent or invalid audio")
+    progress(.95)
 
 if __name__ == "__main__":
     main()

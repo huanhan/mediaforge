@@ -208,7 +208,7 @@ class LocalGenerationBackend:
                 raise BackendError("Voice reference must be uploaded audio", status_code=422, code="invalid_audio")
         readiness = await asyncio.to_thread(self.tasks.speech_runner.readiness)
         if readiness.get("status") != "ready":
-            raise BackendError("Qwen3-TTS is not installed; run python -m minimaxh3_service.setup_tts",
+            raise BackendError("IndexTTS 2.5 is not installed; run python -m minimaxh3_service.setup_tts",
                                status_code=503, code="speech_not_ready", detail=readiness)
         return await self.tasks.submit_speech(request)
 

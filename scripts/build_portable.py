@@ -83,6 +83,8 @@ def build(output: Path, runtime_source: Path | None, vc_runtime: Path) -> Path:
     for source in sorted((ROOT / "minimaxh3_service").glob("*.py")):
         shutil.copy2(source, app / source.name)
     shutil.copy2(ROOT / "minimaxh3_service" / "pose_models.json", app / "pose_models.json")
+    shutil.copy2(ROOT / "minimaxh3_service" / "index_tts_models.json", app / "index_tts_models.json")
+    shutil.copytree(ROOT / "minimaxh3_service" / "voice_presets", app / "voice_presets")
     package_runtimes(package / "runtime", runtime_source)
     for filename in ("start.cmd", "check.cmd", "launch.py", ".env.example"):
         shutil.copy2(ROOT / "packaging" / "windows" / filename, package / filename)

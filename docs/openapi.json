@@ -536,7 +536,7 @@
           "speech"
         ],
         "summary": "Synthesize one shot with a preset or recorded voice",
-        "description": "Local Qwen3-TTS 1.7B. Clone with uploaded 3–30 second reference_file_id and exact reference_text. Poll the shared /v1/tasks queue; returns 24 kHz mono WAV and metadata. Does not perform lip synchronization.",
+        "description": "Local IndexTTS 2.5 with native speed and emotion control. Clone with an uploaded 3–30 second reference_file_id; reference_text is optional. Poll the shared /v1/tasks queue; returns 24 kHz mono WAV and metadata. Does not perform lip synchronization.",
         "operationId": "create_speech",
         "requestBody": {
           "content": {
@@ -2482,6 +2482,12 @@
             "title": "Speaker",
             "default": "Serena"
           },
+          "model": {
+            "type": "string",
+            "const": "IndexTTS-2.5",
+            "title": "Model",
+            "default": "IndexTTS-2.5"
+          },
           "language": {
             "type": "string",
             "enum": [
@@ -2489,22 +2495,11 @@
               "Chinese",
               "English",
               "Japanese",
-              "Korean",
-              "German",
-              "French",
-              "Russian",
-              "Portuguese",
               "Spanish",
-              "Italian"
+              "Arabic"
             ],
             "title": "Language",
             "default": "Chinese"
-          },
-          "instruct": {
-            "type": "string",
-            "maxLength": 500,
-            "title": "Instruct",
-            "default": ""
           },
           "reference_file_id": {
             "anyOf": [
@@ -2534,10 +2529,109 @@
           },
           "speed": {
             "type": "number",
-            "maximum": 1.5,
-            "minimum": 0.75,
+            "maximum": 2.0,
+            "minimum": 0.5,
             "title": "Speed",
             "default": 1
+          },
+          "emotion_mode": {
+            "type": "string",
+            "enum": [
+              "reference",
+              "text",
+              "vector"
+            ],
+            "title": "Emotion Mode",
+            "default": "text"
+          },
+          "emotion_text": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Emotion Text",
+            "default": "自然、平静地讲述。"
+          },
+          "emotion_strength": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Emotion Strength",
+            "default": 0.65
+          },
+          "emotion_vector": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "minItems": 8,
+            "title": "Emotion Vector"
+          },
+          "emotion_reference_file_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emotion Reference File Id"
+          },
+          "pause_ms": {
+            "type": "integer",
+            "maximum": 2000.0,
+            "minimum": 0.0,
+            "title": "Pause Ms",
+            "default": 200
+          },
+          "volume_db": {
+            "type": "number",
+            "maximum": 12.0,
+            "minimum": -12.0,
+            "title": "Volume Db",
+            "default": 0
+          },
+          "temperature": {
+            "type": "number",
+            "maximum": 1.5,
+            "minimum": 0.1,
+            "title": "Temperature",
+            "default": 0.8
+          },
+          "top_p": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.1,
+            "title": "Top P",
+            "default": 0.8
+          },
+          "top_k": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Top K",
+            "default": 30
+          },
+          "repetition_penalty": {
+            "type": "number",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Repetition Penalty",
+            "default": 10
+          },
+          "max_segment_tokens": {
+            "type": "integer",
+            "maximum": 200.0,
+            "minimum": 40.0,
+            "title": "Max Segment Tokens",
+            "default": 120
+          },
+          "text_normalization": {
+            "type": "boolean",
+            "title": "Text Normalization",
+            "default": true
           },
           "seed": {
             "type": "integer",
@@ -3296,7 +3390,7 @@
   "tags": [
     {
       "name": "speech",
-      "description": "Local Qwen3-TTS speech synthesis and recorded voice cloning, one request per shot."
+      "description": "Local IndexTTS 2.5 speech synthesis and recorded voice cloning, one request per shot."
     },
     {
       "name": "transcription",

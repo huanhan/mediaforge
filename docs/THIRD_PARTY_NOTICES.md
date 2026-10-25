@@ -29,3 +29,13 @@ The optional local skeleton extractor uses DWPose ONNX weights from
 https://huggingface.co/yzd-v/DWPose. Download locations and SHA-256 checksums
 are recorded in minimaxh3_service/pose_models.json. These optional models are
 not bundled with the application. Setup and API details are in SKELETON.md.
+
+## Optional IndexTTS 2.5 speech
+
+The optional installer downloads pinned IndexTTS source and weights. Their
+bilibili Model Use License Agreement is retained in the downloaded source;
+see https://github.com/index-tts/index-tts and index_tts_models.json for versions.
+The application bundles nine synthetic voice-reference WAVs generated with
+Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0). They are not user recordings.
+Source revision and file hashes are in minimaxh3_service/voice_presets/manifest.json.
+These fixed samples preserve preset IDs; synthesis uses only IndexTTS 2.5.

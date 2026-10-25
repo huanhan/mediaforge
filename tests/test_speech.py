@@ -14,7 +14,7 @@ from minimaxh3_service.config import Settings
 from minimaxh3_service.local_backend import LocalGenerationBackend
 from minimaxh3_service.speech_models import SpeechRequest
 from minimaxh3_service.speech import SpeechRunner
-from minimaxh3_service.speech_worker import chunks
+from minimaxh3_service.speech_worker import inference_options
 from minimaxh3_service.storage import LocalAssetStore
 from minimaxh3_service.tasks import LocalTaskManager, GenerationCanceled
 
@@ -24,16 +24,33 @@ class Idle:
     def release_models(self): pass
 
 @pytest.mark.parametrize("patch", [dict(text=" "),dict(text="a"*1001),dict(speed=float('inf')),
-    dict(reference_file_id="../x.wav", reference_text="hello"), dict(reference_file_id="x.wav"),
-    dict(reference_text="hello"),dict(reference_file_id="x.wav", reference_text="hello", instruct="angry"),dict(speaker="unknown")])
+    dict(reference_file_id="../x.wav", reference_text="hello"), dict(emotion_vector=[0]*7),
+    dict(reference_text="hello"),dict(emotion_vector=[float("nan")]*8),dict(speaker="unknown"),
+    dict(model="Qwen3-TTS-12Hz-1.7B"),dict(instruct="自然讲述"),dict(emotion_text=" ")])
 def test_request_rejects_invalid_or_unimplemented_parameters(patch):
     with pytest.raises(ValidationError): SpeechRequest.model_validate({"text":"hello",**patch})
 
-def test_chunking_keeps_exact_text_and_bounds():
-    text="你好，欢迎来到我的频道。"*40+"English words without punctuation "*20
-    parts=chunks(text)
-    assert ''.join(parts)==text
-    assert all(0<len(p)<=100 for p in parts)
+def test_native_duration_and_emotion_controls_with_cloned_voice():
+    request = SpeechRequest(text="你好", reference_file_id="voice.wav", speed=1.25,
+        emotion_mode="vector", emotion_vector=[.8,.2,0,0,0,0,0,.1], emotion_strength=.7,
+        pause_ms=350, temperature=.6, top_p=.7, top_k=20, repetition_penalty=8,
+        max_segment_tokens=80, text_normalization=False)
+    options = inference_options({**request.model_dump(), "reference_audio":"local.wav"})
+    assert options["spk_audio_prompt"] == "local.wav"
+    assert options["duration_factor"] == .8
+    assert options["emo_vector"] == [.8,.2,0,0,0,0,0,.1]
+    assert options["emo_alpha"] == .7 and not options["use_emo_text"]
+    assert options["interval_silence"] == 350
+    assert options["temperature"] == .6 and options["top_p"] == .7 and options["top_k"] == 20
+    assert options["repetition_penalty"] == 8 and options["max_text_tokens_per_segment"] == 80
+    assert isinstance(options["repetition_penalty"], float)  # Transformers rejects JSON integers here.
+    assert not options["text_normalization"]
+    options=inference_options({**request.model_dump(),"reference_audio":"voice.wav",
+        "emotion_mode":"reference","emotion_reference_audio":"angry.wav"})
+    assert options["emo_audio_prompt"] == "angry.wav" and options["emo_vector"] is None
+    options=inference_options({**request.model_dump(),"reference_audio":"voice.wav",
+        "emotion_mode":"text","emotion_text":"愤怒"})
+    assert options["use_emo_text"] and options["emo_text"] == "愤怒"
 
 @pytest.fixture
 def speech(tmp_path):
@@ -51,7 +68,7 @@ with wave.open(a.output,'wb') as w:
 ''',encoding='utf-8')
     class Runner(SpeechRunner):
         def _command(self): return [sys.executable,str(script)]
-        def readiness(self): return {"status":"ready","backend":"qwen3_tts"}
+        def readiness(self): return {"status":"ready","backend":"index_tts"}
     settings=Settings(data_root=tmp_path,api_key="secret",allow_interrupt_running=True,tts_timeout_seconds=20)
     store=LocalAssetStore(settings.input_root,settings.output_root,1000000);store.initialize()
     return Runner(settings,store.resolve_input),store
@@ -62,9 +79,10 @@ def test_runner_generates_pcm_speed_metadata_and_cleans_failure(speech):
     artifacts=runner.generate(SpeechRequest(text='你好',speed=1.25),output,threading.Event(),lambda _:None)
     with wave.open(str(output.path),'rb') as wav:
         assert wav.getframerate()==24000 and wav.getnchannels()==1
-        assert .7<wav.getnframes()/24000<.9
+        assert wav.getnframes() == 24000  # speed is applied by the model, never a second FFmpeg atempo pass
     metadata=json.loads(artifacts[1].path.read_text(encoding='utf-8'))
     assert metadata['text']=='你好' and metadata['speaker']=='Serena'
+    assert metadata['model']=='IndexTTS-2.5' and metadata['parameters']['speed']==1.25
     with pytest.raises(RuntimeError): runner.generate(SpeechRequest(text='fail'),output,threading.Event(),lambda _:None)
     assert not output.path.exists() and not output.path.with_suffix('.json').exists()
 

@@ -1,80 +1,107 @@
-"""Install an isolated Qwen3-TTS runtime and pinned 1.7B model checkpoints."""
+"""Install pinned IndexTTS 2.5 source, isolated runtime and offline weights."""
 from __future__ import annotations
 import argparse
+from concurrent.futures import ThreadPoolExecutor
+import io
+import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
+import tarfile
+import urllib.request
 
-MODELS = {
-    "CustomVoice": ("0c0e3051f131929182e2c023b9537f8b1c68adfe", 3833402552,
-                    "38b1d5971bdbd982b561cccec982669a53b0537c3cf5e9bd4778ed07bb2f5137"),
-    "Base": ("fd4b254389122332181a7c3db7f27e918eec64e3", 3857413744,
-             "38fc7fc51c5e776e840414b6fd443962e9411b9654888fd7913e4da643cb857c"),
-}
-TOKENIZER_SIZE = 682293092
-TOKENIZER_SHA = "836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258"
+MANIFEST = json.loads(Path(__file__).with_name("index_tts_models.json").read_text(encoding="utf-8"))
+SOURCE_REVISION = MANIFEST["source_revision"]
 
-def model_name(variant):
-    return f"Qwen3-TTS-12Hz-1.7B-{variant}"
+def model_name():
+    return "IndexTTS-2.5"
 
-def missing_model_files(root, variant):
-    folder = Path(root) / model_name(variant)
-    required = {"config.json": None, "generation_config.json": None, "tokenizer_config.json": None,
-                "preprocessor_config.json": None, "vocab.json": None, "merges.txt": None,
-                "model.safetensors": MODELS[variant][1], "speech_tokenizer/config.json": None,
-                "speech_tokenizer/preprocessor_config.json": None,
-                "speech_tokenizer/model.safetensors": TOKENIZER_SIZE}
-    return [str(folder / name) for name, size in required.items()
-            if not (folder / name).is_file() or not (folder / name).stat().st_size
-            or (size is not None and (folder / name).stat().st_size != size)]
+def model_folder(root):
+    return Path(root) / model_name()
+
+def missing_model_files(root):
+    folder = model_folder(root)
+    return [str(folder / model["destination"] / entry["name"])
+            for model in MANIFEST["models"] for entry in model["files"]
+            if not (folder / model["destination"] / entry["name"]).is_file()
+            or (folder / model["destination"] / entry["name"]).stat().st_size != entry["size"]]
+
+def install_source(folder):
+    folder = Path(folder).resolve()
+    revision_file = folder / "H3_REVISION"
+    if revision_file.is_file() and revision_file.read_text().strip() == SOURCE_REVISION:
+        return
+    if folder.exists() and any(folder.iterdir()):
+        raise RuntimeError(f"Source folder is not the pinned revision; choose an empty --source-dir: {folder}")
+    url = f"https://codeload.github.com/index-tts/index-tts/tar.gz/{SOURCE_REVISION}"
+    with urllib.request.urlopen(url, timeout=120) as response:
+        archive_bytes = response.read()
+    with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as archive:
+        prefix = archive.getmembers()[0].name.split("/")[0]
+        for member in archive.getmembers():
+            target = (folder / Path(member.name).relative_to(prefix)).resolve()
+            if not target.is_relative_to(folder):
+                raise ValueError("Unsafe source archive path")
+            if member.isfile():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(archive.extractfile(member).read())
+    revision_file.write_text(SOURCE_REVISION + "\n", encoding="utf-8")
 
 def download_models(root):
     from filelock import FileLock
-    Path(root).mkdir(parents=True, exist_ok=True)
-    with FileLock(str(Path(root) / ".setup.lock")):
-        _download_models(root)
-
-def _download_models(root):
-    from huggingface_hub import snapshot_download
     from minimaxh3_service.setup_music import download_weights
+    folder = model_folder(root).resolve()
+    folder.mkdir(parents=True, exist_ok=True)
     endpoint = os.environ.get("HF_ENDPOINT", "https://huggingface.co").rstrip("/")
-    for variant, (revision, size, checksum) in MODELS.items():
-        repo = "Qwen/" + model_name(variant)
-        folder = Path(root) / model_name(variant)
-        snapshot_download(repo, revision=revision, local_dir=str(folder), max_workers=2,
-                          allow_patterns=["*.json", "*.txt", "*.md", "LICENSE", "speech_tokenizer/*.json"])
-        for filename, length, digest in [("model.safetensors", size, checksum),
-                                         ("speech_tokenizer/model.safetensors", TOKENIZER_SIZE, TOKENIZER_SHA)]:
-            download_weights(f"{endpoint}/{repo}/resolve/{revision}/{filename}", folder / filename, length, digest)
-        (folder / "REVISION").write_text(revision + "\n", encoding="utf-8")
-        if missing_model_files(root, variant):
-            raise RuntimeError(f"Incomplete Qwen3-TTS checkpoint: {folder}")
-        print(f"Verified {repo}", flush=True)
+    def download(item):
+        model, entry = item
+        target = folder / model["destination"] / entry["name"]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        url = f"{endpoint}/{model['repo']}/resolve/{model['revision']}/{entry['name']}"
+        if entry["sha256"]:
+            download_weights(url, target, entry["size"], entry["sha256"])
+        elif not target.is_file() or target.stat().st_size != entry["size"]:
+            with urllib.request.urlopen(url, timeout=60) as response:
+                data = response.read()
+            if len(data) != entry["size"]:
+                raise RuntimeError(f"Incomplete model file: {entry['name']}")
+            partial = target.with_suffix(target.suffix + ".partial")
+            partial.write_bytes(data)
+            partial.replace(target)
+        print(f"Verified {model['repo']}/{entry['name']}", flush=True)
+    with FileLock(str(folder / ".setup.lock")):
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            list(pool.map(download, [(model, entry) for model in MANIFEST["models"] for entry in model["files"]]))
+        (folder / "H3_MODELS.json").write_text(json.dumps(MANIFEST, indent=2), encoding="utf-8")
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--runtime-dir", type=Path, default=Path(".runtime/qwen3-tts-env"))
+    parser.add_argument("--runtime-dir", type=Path, default=Path(".runtime/index-tts-env"))
+    parser.add_argument("--source-dir", type=Path, default=Path(".runtime/index-tts-src"))
     parser.add_argument("--model-dir", type=Path, default=Path("models/tts"))
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--models-only", action="store_true")
     group.add_argument("--runtime-only", action="store_true")
     args = parser.parse_args(argv)
     if args.models_only:
-        download_models(args.model_dir.resolve())
+        download_models(args.model_dir)
         return
     uv = shutil.which("uv")
     if not uv:
         parser.error("Install uv first")
+    install_source(args.source_dir)
     interpreter = args.runtime_dir.resolve() / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     if not interpreter.is_file():
-        subprocess.run([uv, "venv", "--python", "3.12", str(args.runtime_dir.resolve())], check=True)
+        subprocess.run([uv, "venv", "--python", "3.11", str(args.runtime_dir.resolve())], check=True)
     subprocess.run([uv, "pip", "install", "--python", str(interpreter), "torch==2.8.0", "torchaudio==2.8.0",
-                    "--index-url", "https://download.pytorch.org/whl/cu126"], check=True)
-    subprocess.run([uv, "pip", "install", "--python", str(interpreter), "qwen-tts==0.1.1"], check=True)
+                    "--index-url", "https://download.pytorch.org/whl/cu128"], check=True)
+    subprocess.run([uv, "pip", "install", "--python", str(interpreter), "-e", str(args.source_dir.resolve()),
+                    "langid==1.1.6", "sentencepiece==0.2.1"], check=True)
+    # infer_v2_5 uses its own multilingual tokenizer; it does not use g2p-en/NLTK corpora.
     if not args.runtime_only:
-        download_models(args.model_dir.resolve())
-    print(f"TTS runtime: {interpreter}", flush=True)
+        download_models(args.model_dir)
+    print(f"IndexTTS 2.5 runtime: {interpreter}", flush=True)
 
 if __name__ == "__main__":
     main()
