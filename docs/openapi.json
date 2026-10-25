@@ -530,6 +530,86 @@
         ]
       }
     },
+    "/v1/audio/speech": {
+      "post": {
+        "tags": [
+          "speech"
+        ],
+        "summary": "Synthesize one shot with a preset or recorded voice",
+        "description": "Local Qwen3-TTS 1.7B. Clone with uploaded 3–30 second reference_file_id and exact reference_text. Poll the shared /v1/tasks queue; returns 24 kHz mono WAV and metadata. Does not perform lip synchronization.",
+        "operationId": "create_speech",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpeechRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmittedSpeechTask"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The local inference backend rejected or failed the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/audio/alignments": {
       "post": {
         "tags": [
@@ -2378,6 +2458,102 @@
         ],
         "title": "SourceVideo"
       },
+      "SpeechRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Text"
+          },
+          "speaker": {
+            "type": "string",
+            "enum": [
+              "Serena",
+              "Vivian",
+              "Uncle_Fu",
+              "Dylan",
+              "Eric",
+              "Ryan",
+              "Aiden",
+              "Ono_Anna",
+              "Sohee"
+            ],
+            "title": "Speaker",
+            "default": "Serena"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "Auto",
+              "Chinese",
+              "English",
+              "Japanese",
+              "Korean",
+              "German",
+              "French",
+              "Russian",
+              "Portuguese",
+              "Spanish",
+              "Italian"
+            ],
+            "title": "Language",
+            "default": "Chinese"
+          },
+          "instruct": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Instruct",
+            "default": ""
+          },
+          "reference_file_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference File Id"
+          },
+          "reference_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1500,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Text"
+          },
+          "speed": {
+            "type": "number",
+            "maximum": 1.5,
+            "minimum": 0.75,
+            "title": "Speed",
+            "default": 1
+          },
+          "seed": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Seed",
+            "default": 42
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "SpeechRequest"
+      },
       "SubmittedBeatAnalysisTask": {
         "properties": {
           "id": {
@@ -2497,6 +2673,30 @@
           "queue_number"
         ],
         "title": "SubmittedSkeletonTask"
+      },
+      "SubmittedSpeechTask": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "const": "queued",
+            "title": "Status",
+            "default": "queued"
+          },
+          "queue_number": {
+            "type": "integer",
+            "title": "Queue Number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "queue_number"
+        ],
+        "title": "SubmittedSpeechTask"
       },
       "SubmittedTask": {
         "properties": {
@@ -2646,7 +2846,8 @@
                   "skeleton",
                   "beat_analysis",
                   "transcription",
-                  "alignment"
+                  "alignment",
+                  "speech"
                 ]
               },
               {
@@ -3093,6 +3294,10 @@
     }
   },
   "tags": [
+    {
+      "name": "speech",
+      "description": "Local Qwen3-TTS speech synthesis and recorded voice cloning, one request per shot."
+    },
     {
       "name": "transcription",
       "description": "Local Qwen3-ASR transcription and forced alignment of confirmed lyrics."

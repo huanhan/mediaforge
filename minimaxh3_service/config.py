@@ -23,6 +23,10 @@ class Settings:
     max_queue_size: int = 8
     idle_release_seconds: float = 5.0
     upscale_idle_release_seconds: float = 5.0
+    tts_python: Path = Path(".runtime/qwen3-tts-env/Scripts/python.exe" if os.name == "nt" else ".runtime/qwen3-tts-env/bin/python")
+    tts_model_path: Path = Path("models/tts")
+    tts_device: str = "cuda"
+    tts_timeout_seconds: float = 1800.0
     music_python: Path = Path(".runtime/yue2-env/Scripts/python.exe" if os.name == "nt" else ".runtime/yue2-env/bin/python")
     music_model_path: Path = Path("models/music/yue2")
     music_device: str = "cuda"
@@ -81,6 +85,10 @@ class Settings:
     upscale_seed: int = 42
 
     def __post_init__(self) -> None:
+        if self.tts_device not in {"cpu", "cuda"} and not (self.tts_device.startswith("cuda:") and self.tts_device[5:].isdigit()):
+            raise ValueError("H3_TTS_DEVICE must be cpu or cuda[:index]")
+        if not math.isfinite(self.tts_timeout_seconds) or self.tts_timeout_seconds <= 0:
+            raise ValueError("H3_TTS_TIMEOUT_SECONDS must be finite and positive")
         if self.asr_device != "cpu" and self.asr_device != "cuda" and not (
             self.asr_device.startswith("cuda:") and self.asr_device[5:].isdigit()
         ):
@@ -140,6 +148,10 @@ class Settings:
             pose_model_path=Path(os.getenv("H3_POSE_MODEL_PATH", str(defaults.pose_model_path))),
             pose_max_frames=int(os.getenv("H3_POSE_MAX_FRAMES", str(defaults.pose_max_frames))),
             pose_timeout_seconds=float(os.getenv("H3_POSE_TIMEOUT_SECONDS", str(defaults.pose_timeout_seconds))),
+            tts_python=Path(os.getenv("H3_TTS_PYTHON", str(defaults.tts_python))),
+            tts_model_path=Path(os.getenv("H3_TTS_MODEL_PATH", str(defaults.tts_model_path))),
+            tts_device=os.getenv("H3_TTS_DEVICE", defaults.tts_device),
+            tts_timeout_seconds=float(os.getenv("H3_TTS_TIMEOUT_SECONDS", str(defaults.tts_timeout_seconds))),
             music_python=Path(os.getenv("H3_MUSIC_PYTHON", str(defaults.music_python))),
             music_model_path=Path(os.getenv("H3_MUSIC_MODEL_PATH", str(defaults.music_model_path))),
             music_device=os.getenv("H3_MUSIC_DEVICE", defaults.music_device),

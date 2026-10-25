@@ -86,6 +86,16 @@ class VideoClient:
             payload = request_type.model_validate(payload).model_dump(mode="json", exclude_none=True)
             return self.unpack(client.post("v1/edits" if editing else "v1/generations", json=payload)), payload
 
+    def submit_speech(self, parameters, reference=None):
+        from .speech_models import SpeechRequest
+        payload = SpeechRequest.model_validate({**parameters, **({"reference_file_id": "pending.wav"} if reference else {})}).model_dump(mode="json", exclude_none=True)
+        with self.connect() as client:
+            if reference:
+                with Path(reference).open("rb") as source:
+                    payload["reference_file_id"] = self.unpack(client.post("v1/files", data={"kind": "audio"},
+                        files={"file": (Path(reference).name, source)}))["file_id"]
+            return self.unpack(client.post("v1/audio/speech", json=payload))
+
     def submit_music(self, parameters):
         from .models import MusicRequest
         payload = MusicRequest.model_validate(parameters).model_dump(mode="json")
@@ -409,6 +419,9 @@ def build_ui(client: VideoClient):
         with gr.Tab("视频编辑"):
             from .ui_edit import add_edit_ui
             add_edit_ui(client, refresh, cancel)
+        from .ui_speech import add_speech_ui
+        with gr.Tab("文本转语音"):
+            add_speech_ui(client)
         from .ui_music import add_music_ui
         with gr.Tab("音乐生成"):
             add_music_ui(client)

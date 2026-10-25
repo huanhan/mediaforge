@@ -325,3 +325,7 @@ Gradio `/ui/` 通过“视频生成”和“视频编辑”独立 Tab 区分功�
 视频编辑接口 `/v1/edits` 和 Gradio“视频编辑”Tab 支持清晰度和比例，优先级为显式宽高 > 清晰度与比例 > 源视频尺寸；编辑默认沿用源视频尺寸。
 
 视频生成 `/v1/generations`（t2v / fl2v / ref2v）与视频编辑 `/v1/edits` 均支持 `resolution` / `aspect_ratio`，采用相同的清晰度档位、比例和像素限制。显式宽高优先于档位；未指定尺寸时，生成默认 1344×768，编辑沿用源视频尺寸。生成和编辑 Gradio 表单均支持档位选择，详见 [对接指南](docs/INTEGRATION.md)。
+
+## 本地文本转语音
+
+支持 Qwen3-TTS 1.7B 预置音色及录音克隆，逐镜头口播使用 `POST /v1/audio/speech`，与 H3 共用 GPU 队列。安装、接口和视频工作室用法见 [SPEECH.md](docs/SPEECH.md)。

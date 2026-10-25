@@ -15,7 +15,7 @@ from .models import TranscriptionRequest, SubmittedTranscriptionTask, AlignmentR
 
 
 TaskState = Literal["queued", "running", "succeeded", "failed", "canceled", "unknown"]
-TaskKind = Literal["generation", "upscale", "removal", "music", "depth", "skeleton", "beat_analysis", "transcription", "alignment"]
+TaskKind = Literal["generation", "upscale", "removal", "music", "depth", "skeleton", "beat_analysis", "transcription", "alignment", "speech"]
 
 
 class BackendError(RuntimeError):

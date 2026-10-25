@@ -18,6 +18,8 @@ from .storage import LocalAssetStore
 from .tasks import H3Runner, LocalTaskManager, UpscaleRunner
 from .upscale import SeedVR2UpscaleRunner
 from .music import MusicRunner
+from .speech import SpeechRunner
+from .speech_models import SpeechRequest, SubmittedSpeechTask
 from .models import MusicRequest, SubmittedMusicTask
 from .models import DepthRequest, SubmittedDepthTask
 from .depth import VideoDepthRunner
@@ -53,6 +55,7 @@ class LocalGenerationBackend:
         beat_runner=None,
         transcription_runner=None,
         alignment_runner=None,
+        speech_runner=None,
     ) -> None:
         self.settings = settings
         self.assets = LocalAssetStore(
@@ -81,6 +84,7 @@ class LocalGenerationBackend:
             skeleton_runner=skeleton_runner or SkeletonRunner(settings, self.assets.resolve_input),
             beat_runner=beat_runner or BeatAnalysisRunner(settings, self.assets.resolve_input),
             transcription_runner=transcription_runner or TranscriptionRunner(settings, self.assets.resolve_input),
+            speech_runner=speech_runner or SpeechRunner(settings, self.assets.resolve_input),
             alignment_runner=alignment_runner or AlignmentRunner(settings, self.assets.resolve_input),
         )
 
@@ -95,6 +99,7 @@ class LocalGenerationBackend:
         readiness = dict(self.runner.readiness())
         readiness["upscale"] = self.upscale_runner.readiness()
         readiness["removal"] = self.tasks.removal_runner.readiness()
+        readiness["speech"] = await asyncio.to_thread(self.tasks.speech_runner.readiness)
         readiness["music"] = await asyncio.to_thread(self.tasks.music_runner.readiness)
         readiness["depth"] = self.tasks.depth_runner.readiness()
         readiness["skeleton"] = self.tasks.skeleton_runner.readiness()
@@ -195,6 +200,17 @@ class LocalGenerationBackend:
         if source.suffix.lower() not in VIDEO_EXTENSIONS:
             raise BackendError("removal requires an uploaded video", status_code=415, code="invalid_video")
         return await self.tasks.submit_removal(request)
+
+    async def submit_speech(self, request: SpeechRequest) -> SubmittedSpeechTask:
+        if request.reference_file_id:
+            source = self.assets.resolve_input(request.reference_file_id)
+            if source.suffix.lower() not in AUDIO_EXTENSIONS:
+                raise BackendError("Voice reference must be uploaded audio", status_code=422, code="invalid_audio")
+        readiness = await asyncio.to_thread(self.tasks.speech_runner.readiness)
+        if readiness.get("status") != "ready":
+            raise BackendError("Qwen3-TTS is not installed; run python -m minimaxh3_service.setup_tts",
+                               status_code=503, code="speech_not_ready", detail=readiness)
+        return await self.tasks.submit_speech(request)
 
     async def submit_music(self, request: MusicRequest) -> SubmittedMusicTask:
         validate = getattr(self.tasks.music_runner, "validate_request", None)

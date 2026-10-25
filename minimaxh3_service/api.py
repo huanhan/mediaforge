@@ -27,6 +27,7 @@ from fastapi import (
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
+from .speech_models import SpeechRequest, SubmittedSpeechTask, SPEAKERS
 from . import __version__
 from .backend import BackendError, BackendTask, GenerationBackend
 from .config import Settings
@@ -62,6 +63,7 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 OPENAPI_TAGS = [
+    {"name": "speech", "description": "Local Qwen3-TTS speech synthesis and recorded voice cloning, one request per shot."},
     {"name": "transcription", "description": "Local Qwen3-ASR transcription and forced alignment of confirmed lyrics."},
     {"name": "beat", "description": "Analyze uploaded music for beats, downbeats, onsets and energy; timestamps are in original-audio seconds."},
     {"name": "pose", "description": "Local DWPose skeleton extraction."},
@@ -324,6 +326,9 @@ def create_app(
                              "available": readiness.get("skeleton", {}).get("status") == "ready",
                              "endpoint": "/v1/poses", "outputs": ["skeleton"]},
                 "removal": readiness.get("removal", {"status": "not_ready"}),
+                "speech": {**readiness.get("speech", {"status": "not_ready"}),
+                           "available": readiness.get("speech", {}).get("status") == "ready",
+                           "endpoint": "/v1/audio/speech", "speakers": list(SPEAKERS), "default_speaker": "Serena"},
                 "transcription": {**readiness.get("transcription", {"status": "not_ready"}),
                                   "available": readiness.get("transcription", {}).get("status") == "ready",
                                   "endpoint": "/v1/audio/transcriptions", "outputs": ["json", "txt"]},
@@ -531,6 +536,16 @@ def create_app(
             width=submitted.width,
             height=submitted.height,
         )
+
+    @router.post("/audio/speech", response_model=SubmittedSpeechTask, status_code=202,
+                 tags=["speech"], summary="Synthesize one shot with a preset or recorded voice",
+                 operation_id="create_speech", responses={429: BACKEND_ERROR_RESPONSE, 503: BACKEND_ERROR_RESPONSE},
+                 description="Local Qwen3-TTS 1.7B. Clone with uploaded 3–30 second reference_file_id and exact reference_text. Poll the shared /v1/tasks queue; returns 24 kHz mono WAV and metadata. Does not perform lip synchronization.")
+    async def create_speech(request: Request, body: SpeechRequest) -> SubmittedSpeechTask:
+        submit = getattr(_backend(request), "submit_speech", None)
+        if submit is None:
+            raise HTTPException(status_code=503, detail="Speech generation is not configured")
+        return await submit(body)
 
     @router.post("/audio/alignments", response_model=SubmittedTranscriptionTask, status_code=202,
                  tags=["transcription"], summary="Align confirmed lyric lines to uploaded audio",

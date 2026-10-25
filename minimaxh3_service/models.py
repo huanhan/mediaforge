@@ -12,7 +12,7 @@ MAX_CANVAS_PIXELS = 768 * 1344
 MUSIC_MAX_DURATION_SECONDS = 500
 IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"})
 VIDEO_EXTENSIONS = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"})
-AUDIO_EXTENSIONS = frozenset({".wav", ".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus"})
+AUDIO_EXTENSIONS = frozenset({".wav", ".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".webm"})
 FileId = Annotated[str, StringConstraints(min_length=1, max_length=512)]
 
 
@@ -547,7 +547,7 @@ class OutputFile(BaseModel):
 
 class TaskStatus(BaseModel):
     id: str = Field(description="Task identifier.")
-    kind: Literal["generation", "upscale", "removal", "music", "depth", "skeleton", "beat_analysis", "transcription", "alignment"] | None = Field(
+    kind: Literal["generation", "upscale", "removal", "music", "depth", "skeleton", "beat_analysis", "transcription", "alignment", "speech"] | None = Field(
         default=None,
         description="Task type. All types use the same status endpoints.",
     )

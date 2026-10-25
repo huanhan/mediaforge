@@ -74,9 +74,13 @@ class MusicRunner:
             self._probe_cache = (time.monotonic(), detail)
         return {**result, **detail}
 
+    @property
+    def timeout_seconds(self):
+        return self.settings.music_timeout_seconds
+
     def _run(self, arguments, log, status_file, cancel, progress):
         process = None
-        deadline = time.monotonic() + self.settings.music_timeout_seconds
+        deadline = time.monotonic() + self.timeout_seconds
         last_progress = 0.0
         try:
             if cancel.is_set():
@@ -88,7 +92,7 @@ class MusicRunner:
                     if cancel.wait(.2):
                         raise GenerationCanceled("music task canceled")
                     if time.monotonic() >= deadline:
-                        raise TimeoutError("YuE2 exceeded H3_MUSIC_TIMEOUT_SECONDS")
+                        raise TimeoutError("Audio generation exceeded its configured timeout")
                     try:
                         value = float(json.loads(status_file.read_text(encoding="utf-8"))["progress"])
                         if last_progress < value < 1:
@@ -102,7 +106,7 @@ class MusicRunner:
                 with log.open("rb") as stream:
                     stream.seek(max(0, log.stat().st_size - 5000))
                     detail = stream.read().decode("utf-8", errors="replace")
-                raise RuntimeError(f"YuE2 generation failed: {detail}")
+                raise RuntimeError(f"Audio generation failed: {detail}")
         finally:
             if process is not None and process.poll() is None:
                 if os.name == "nt":
