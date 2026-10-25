@@ -1,0 +1,74 @@
+MiniMax H3 视频生成工具 — Docker 使用说明
+
+一、准备环境
+需要 Docker、NVIDIA 显卡和兼容驱动，以及 Docker GPU 支持。
+Linux 宿主需 NVIDIA Container Toolkit；Windows 使用 Docker Desktop 的 WSL2 Linux 容器模式。
+本包镜像为 linux/amd64，包含程序和 Gradio 界面，不包含模型权重。
+
+二、下载模型
+国内网络可尝试 HF Mirror（下载速度和可用性取决于网络）：
+https://hf-mirror.com/Comfy-Org/MiniMax-H3/tree/main
+原始仓库：https://huggingface.co/Comfy-Org/MiniMax-H3/tree/main
+
+在 compose.yaml 同目录创建 models 和 data 文件夹。
+文生视频、首尾帧生成只需下列 5 个文件，合计约 45 GB，不必下载整个仓库：
+
+models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors
+models/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors
+models/vae/minimax_h3_video_vae_fp16.safetensors
+models/vae/minimax_h3_audio_vae_fp32.safetensors
+models/loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors
+
+要使用“参考素材生成”，再下载同仓库以下两个文件：
+models/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors
+models/loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors
+
+图片/视频超分是可选 API 功能，另需 SeedVR2：
+https://hf-mirror.com/numz/SeedVR2_comfyUI/tree/main
+原始仓库：https://huggingface.co/numz/SeedVR2_comfyUI/tree/main
+放置位置：
+models/SEEDVR2/seedvr2_ema_3b_fp8_e4m3fn.safetensors
+models/SEEDVR2/ema_vae_fp16.safetensors
+
+文件名保持不变，不要多套一层 models/models。使用模型请遵守仓库许可。
+
+三、导入和启动
+在包含 TAR 文件和 compose.yaml 的目录打开终端，依次执行：
+
+docker load -i minimaxh3-{version}-linux-amd64.docker.tar
+docker compose up -d --no-build --pull never
+
+然后在浏览器打开：
+视频界面：http://127.0.0.1:8000/ui/
+API 文档：http://127.0.0.1:8000/docs
+
+只需要一个端口，不需要另外启动界面。
+请保留 --no-build --pull never，使用导入的本地镜像。
+
+四、生成视频与查看状态
+在界面点击“检查服务”，选择“文生视频”，输入画面与声音描述。
+第一次建议 608×352、4 秒，点击“生成视频”，完成后可预览和下载。
+Turbo 默认开启，会覆盖步数、采样器和调度器。
+生成结果保存在宿主 data/output，输入在 data/input。
+
+查看日志：docker compose logs -f
+查看容器：docker compose ps
+停止服务：docker compose down
+退出日志跟踪（Ctrl+C）不会停止后台容器。
+模型就绪：http://127.0.0.1:8000/readyz
+缺模型时可返回 503；核对目录、文件名及日志，可选功能需其对应模型。
+
+五、改端口或使用现有模型（可选）
+在 compose.yaml 同目录新建或编辑 .env（不要保存成 .env.txt）：
+
+H3_PUBLISHED_PORT=8001
+H3_MODELS_PATH=D:/AI/models
+H3_DATA_PATH=D:/AI/h3-data
+
+请填入实际存在的目录；Linux 示例为 /srv/h3/models 和 /srv/h3/data。
+修改后再次执行 docker compose up -d --no-build --pull never
+浏览器改用 http://127.0.0.1:8001/ui/
+容器日志显示内部 8000 端口，访问时以宿主映射端口为准。
+设置 H3_API_KEY 后，界面登录用户名为 h3，密码为该 Key。
+
+更多模型和部署说明见同目录 MODELS.md 和 DISTRIBUTION.md。

@@ -8,7 +8,7 @@
 python scripts/build_windows.py
 ```
 
-产物：`dist/windows-日期-时间/`，包含 ZIP 和校验文件。解压、放好模型后双击 `start.cmd`。
+产物：`dist/windows-日期-时间/`，包含 ZIP、校验文件和 `使用说明-Windows.txt`。ZIP 内也包含该说明。解压、放好模型后双击 `start.cmd`。
 
 需要 Windows x64、Python 3.13、uv、Git 和所需的 x64 运行库；不需要 Docker。
 
@@ -18,7 +18,7 @@ python scripts/build_windows.py
 python scripts/build_docker.py
 ```
 
-产物：`dist/docker-日期-时间/`，包含镜像 TAR、校验文件、Compose 配置和使用说明，同时保留本地构建的镜像。
+产物：`dist/docker-日期-时间/`，包含镜像 TAR、校验文件、Compose 配置和 `使用说明-Docker.txt`，同时保留本地构建的镜像。说明中的导入命令自动填入本次版本号。
 
 需要 Python 3.13 和运行中的 Docker（Linux 容器模式）；不需要 Windows 打包环境。
 

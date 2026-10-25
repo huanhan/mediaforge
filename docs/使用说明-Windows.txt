@@ -1,0 +1,70 @@
+MiniMax H3 视频生成工具 — Windows 使用说明
+
+一、第一次使用
+1. 将 ZIP 完整解压到可写目录，不要在压缩包里直接运行。
+2. 下载下方模型，按目录放入与 start.cmd 同级的 models 文件夹。
+3. 双击 check.cmd 检查模型和运行环境。
+4. 双击 start.cmd 启动，保持控制台窗口开启。
+5. 浏览器打开 http://127.0.0.1:8000/ui/ 开始使用。
+
+无需安装 Python、Git、CUDA Toolkit；需要 Windows 10/11 x64、NVIDIA 显卡及兼容 CUDA 12.6 的驱动。
+模型不包含在程序包中。
+
+二、模型下载与存放
+国内网络可尝试 HF Mirror（下载速度和可用性取决于网络）：
+https://hf-mirror.com/Comfy-Org/MiniMax-H3/tree/main
+原始仓库：
+https://huggingface.co/Comfy-Org/MiniMax-H3/tree/main
+
+文生视频、首尾帧生成：只需以下 5 个文件，合计约 45 GB，不必下载整个仓库。
+相对于解压后的程序目录，放置位置为：
+
+models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors
+models/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors
+models/vae/minimax_h3_video_vae_fp16.safetensors
+models/vae/minimax_h3_audio_vae_fp32.safetensors
+models/loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors
+
+要使用“参考素材生成”，再下载同仓库以下两个文件：
+models/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors
+models/loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors
+
+图片/视频超分是可选 API 功能，另需 SeedVR2：
+https://hf-mirror.com/numz/SeedVR2_comfyUI/tree/main
+原始仓库：https://huggingface.co/numz/SeedVR2_comfyUI/tree/main
+放置位置：
+models/SEEDVR2/seedvr2_ema_3b_fp8_e4m3fn.safetensors
+models/SEEDVR2/ema_vae_fp16.safetensors
+
+文件名保持不变，不要多套一层 models/models。使用模型请遵守仓库许可。
+
+三、生成一个视频
+打开界面，点击“检查服务”，选择“文生视频”，输入画面和声音描述。
+建议第一次使用 608×352、4 秒，其余参数保持默认。
+点击“生成视频”，等待完成后可预览并下载。首尾帧模式需上传至少一帧图片。
+进度会自动刷新，模型首次加载可能较慢。
+Turbo 默认开启，会覆盖步数、采样器和调度器。
+
+四、地址、结果与关闭
+视频界面：http://127.0.0.1:8000/ui/
+API 文档：http://127.0.0.1:8000/docs
+模型就绪：http://127.0.0.1:8000/readyz
+界面和 API 共用一个端口。输入在 data/input，生成结果在 data/output。
+关闭控制台窗口或按 Ctrl+C 停止服务。
+
+五、修改配置（可选）
+在程序目录将 .env.example 复制为 .env，用记事本编辑，再重启服务。
+已有 .env 时直接编辑，不要覆盖。注意文件名不是 .env.txt。
+例如使用外部模型目录和其他端口：
+H3_MODEL_DIR=D:/AI/models
+H3_UPSCALE_MODEL_DIR=D:/AI/models/SEEDVR2
+H3_PORT=8001
+修改后访问 http://127.0.0.1:8001/ui/
+设置 H3_API_KEY 后，界面登录用户名为 h3，密码为该 Key。
+
+六、常见问题
+打不开页面：确认 start.cmd 窗口还在运行，查看控制台报错及实际端口。
+提示缺模型：双击 check.cmd，核对文件名、目录及下载是否完整。
+未安装可选模型时，其对应功能不可用；check.cmd 也可能报告未就绪。
+显存不足或生成较慢：降低宽高和时长，关闭其他占显存程序。
+更多信息见同目录 MODELS.md 和 DISTRIBUTION.md。

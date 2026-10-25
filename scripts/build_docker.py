@@ -41,6 +41,10 @@ def build(output: Path, skip_build: bool) -> None:
     shutil.copy2(ROOT / "compose.yaml", output / "compose.yaml")
     for filename in ("DISTRIBUTION.md", "MODELS.md", "THIRD_PARTY_NOTICES.md"):
         shutil.copy2(ROOT / "docs" / filename, output / filename)
+    instructions = (ROOT / "docs" / "使用说明-Docker.txt").read_text(encoding="utf-8-sig")
+    (output / "使用说明-Docker.txt").write_text(
+        instructions.replace("{version}", version), encoding="utf-8-sig",
+    )
     print(f"Built {archive} ({archive.stat().st_size:,} bytes)", flush=True)
 
 
