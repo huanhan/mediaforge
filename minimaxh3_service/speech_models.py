@@ -14,7 +14,7 @@ class SpeechRequest(BaseModel):
     reference_file_id: str | None = Field(default=None, min_length=1, max_length=512)
     reference_text: str | None = Field(default=None, min_length=1, max_length=1500)
     speed: float = Field(default=1, ge=0.5, le=2, allow_inf_nan=False)
-    mode: Literal["clone", "direction"] = "clone"
+    mode: Literal["clone", "direction", "design"] = "clone"
     instruction: str = Field(default="", max_length=500)
     cfg_scale: float = Field(default=4, ge=1, le=6, allow_inf_nan=False)
     pause_ms: int = Field(default=200, ge=0, le=2000)
@@ -34,8 +34,10 @@ class SpeechRequest(BaseModel):
     def reference_pair(self):
         if bool(self.reference_text) != bool(self.reference_file_id):
             raise ValueError("Breeze cloning requires reference_file_id and the exact reference_text together")
-        if self.mode == "direction" and not self.instruction:
-            raise ValueError("Voice direction requires an instruction")
+        if self.mode in {"direction", "design"} and not self.instruction:
+            raise ValueError("Voice direction/design requires an instruction")
+        if self.mode == "design" and self.reference_file_id:
+            raise ValueError("Voice design uses an instruction without reference audio")
         return self
 
 class SubmittedSpeechTask(BaseModel):

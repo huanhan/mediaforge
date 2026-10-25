@@ -543,7 +543,7 @@ def create_app(
     @router.post("/audio/speech", response_model=SubmittedSpeechTask, status_code=202,
                  tags=["speech"], summary="Synthesize one shot with a preset or recorded voice",
                  operation_id="create_speech", responses={429: BACKEND_ERROR_RESPONSE, 503: BACKEND_ERROR_RESPONSE},
-                 description="Local Breeze TTS 2 for research/non-commercial use. Clone with a 3–30 second reference_file_id and its exact reference_text. mode=clone preserves delivery; mode=direction uses instruction and cfg_scale. speed is pitch-preserving postprocessing; pause_ms separates text chunks before speed adjustment. Supports Chinese/English. Poll the shared /v1/tasks queue; returns 24 kHz mono WAV and metadata. Does not perform lip synchronization.")
+                 description="Local Breeze TTS 2 for research/non-commercial use. Clone with a 3–30 second reference_file_id and its exact reference_text. mode=clone preserves delivery; mode=direction adds instruction and cfg_scale; mode=design uses instruction and cfg_scale without reference audio. Text supports Chinese [笑]/[叹气]/[咳嗽]/[清嗓子] and English (laugh)/(sigh)/(cough)/(clears throat). speed is pitch-preserving postprocessing; pause_ms separates text chunks before speed adjustment. Supports Chinese/English. Poll the shared /v1/tasks queue; returns 24 kHz mono WAV and metadata. Does not perform lip synchronization.")
     async def create_speech(request: Request, body: SpeechRequest) -> SubmittedSpeechTask:
         submit = getattr(_backend(request), "submit_speech", None)
         if submit is None:

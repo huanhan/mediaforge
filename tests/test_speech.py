@@ -27,7 +27,8 @@ class Idle:
     dict(reference_file_id="../x.wav", reference_text="hello"), dict(reference_file_id="voice.wav"),
     dict(reference_text="hello"),dict(cfg_scale=float("nan")),dict(speaker="unknown"),
     dict(model="IndexTTS-2.5"),dict(emotion_mode="vector"),dict(mode="direction",instruction=" "),
-    dict(language="Japanese"),dict(repetition_penalty=10)])
+    dict(language="Japanese"),dict(repetition_penalty=10),dict(mode="design"),
+    dict(mode="design",instruction="Warm voice",reference_file_id="voice.wav",reference_text="hello")])
 def test_request_rejects_invalid_or_retired_parameters(patch):
     with pytest.raises(ValidationError): SpeechRequest.model_validate({"text":"hello",**patch})
 
@@ -43,6 +44,11 @@ def test_clone_keeps_exact_reference_and_omits_instruction():
                                   "mode": "direction", "instruction": "Speak with restrained anger"})
     assert directed["instruction"] == "Speak with restrained anger"
     assert directed["ref_audio_path"] == options["ref_audio_path"]
+
+def test_instruction_only_design_never_injects_a_reference():
+    request = SpeechRequest(text="[笑] 你好。", mode="design", instruction="温柔亲切的年轻女声", cfg_scale=4)
+    options = inference_options(request.model_dump())
+    assert options == {"id": "shot", "speaker": "S0", "text": request.text, "instruction": request.instruction}
 
 
 def test_segments_preserve_text_and_inline_events():
@@ -81,8 +87,11 @@ a,extra=p.parse_known_args();r=json.loads(Path(a.request).read_text(encoding='ut
 if r['text']=='slow': time.sleep(20)
 if r['text']=='fail': raise RuntimeError('failed worker')
 assert '--model-dir' in extra
-assert r['reference_text']
-if not r['reference_file_id']: assert r['reference_audio'].endswith('Serena.wav')
+if r['mode']=='design':
+ assert 'reference_audio' not in r and r['reference_text'] is None
+else:
+ assert r['reference_text']
+ if not r['reference_file_id']: assert r['reference_audio'].endswith('Serena.wav')
 with wave.open(a.output,'wb') as w:
  w.setparams((1,2,24000,0,'NONE','not compressed'))
  w.writeframes(b''.join(struct.pack('<h',int(2000*math.sin(i/20))) for i in range(24000)))
@@ -124,6 +133,17 @@ def test_api_shared_queue_and_download(speech):
         assert state['kind']=='speech' and len(state['outputs'])==2
         audio=next(o for o in state['outputs'] if o['filename'].endswith('.wav'))
         assert client.get(audio['download_url']).content[:4]==b'RIFF'
+
+def test_design_runner_skips_presets_and_records_designed_voice(speech, monkeypatch):
+    runner, store = speech
+    def reject_reference(_):
+        pytest.fail("Voice design must not resolve a reference")
+    monkeypatch.setattr(runner, "resolve_input", reject_reference)
+    base = store.output_path('designed', 'speech/design')
+    output = OutputArtifact('designed.wav', base.subfolder, base.path.with_suffix('.wav'))
+    artifacts = runner.generate(SpeechRequest(text='[笑] 你好。', mode='design', instruction='温暖清晰的女声'),
+                                output, threading.Event(), lambda _: None)
+    assert json.loads(artifacts[1].path.read_text(encoding='utf-8'))['speaker'] == 'voice_design'
 
 
 def test_uploaded_voice_and_transcript_reach_breeze_instead_of_default_preset(speech, monkeypatch):

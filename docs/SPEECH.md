@@ -38,11 +38,8 @@
   "text": "[叹气] 没想到过了这么久，你还记得我的声音。",
   "model": "Breeze-TTS-2",
   "speaker": "Serena",
-  "language": "Chinese",
-  "mode": "clone",
-  "speed": 1,
-  "pause_ms": 200,
-  "seed": 42
+  "language": "Auto",
+  "mode": "clone"
 }
 ```
 
@@ -50,7 +47,11 @@
 
 - `mode=clone`：不传入任何额外表演指令，CFG 固定为 1，优先保留参考声线与语气。
 - `mode=direction`：需要 `instruction`，可描述情绪、节奏、表达方式；`cfg_scale` 为指令引导系数 1–6，默认 4。它不等于情绪百分比，不保证精确控制任意表演。
-- 中文 `[笑]`、`[叹气]`、`[咳嗽]`，英文 `(laugh)`、`(sigh)`、`(cough)` 直接写在台词中。
+- `mode=design`：需要 `instruction` 描述声音，不需要参考音频/文字稿，不使用默认预设；CFG 默认 4。与 clone/direction 的录音复刻分开，不能同时传自定义参考录音。
+- 中文 `[笑]`、`[叹气]`、`[咳嗽]`、`[清嗓子]`，英文 `(laugh)`、`(sigh)`、`(cough)`、`(clears throat)` 直接写在台词中。Gradio 提供可点选的完整示例，仅保留台词、参考音色或 instruction、CFG；高级设置已移除，其他参数使用服务默认值。
+
+以下为兼容底层 HTTP 调用而保留的可选参数；工作室和 Gradio 不展示、不传入这些参数：
+
 - `speed` 0.5–2：合成后通过 FFmpeg atempo 保音高变速；不是模型原生时长控制。
 - `pause_ms` 0–2000：换行/长文本分段之间追加的静音，随后与整段一起变速，不是每个标点的停顿。
 - `volume_db` -12–12；temperature .1–1.5（默认 .9），top_p .1–1（默认 1），top_k 1–100（默认 50），repetition_penalty 1–2（默认 1.1），seed。
@@ -78,3 +79,5 @@ Windows、RTX 4070 Ti 12GB、独立 CPython 3.11、Torch 2.9.1 CUDA 12.8，BF16 
 四份音频均为非静音的完整 24 kHz 单声道 PCM WAV。独立本地 SenseVoice 转写与目标台词一致（忽略英文大小写与标点）；这验证内容完整性，不等于主观音质、情感表现或说话人相似度评测。12GB 保守路径可以运行，但当前冷启动试听不是即时播放。测试输出保存在本机 `outputs/breeze-smoke-20261026/`，不随代码分发。
 
 H3 配音、安装许可、OpenAPI、Gradio 相关测试共 26 项通过。客户端另验证默认参数、旧画布迁移、逐镜配音合成、录音管理，以及文字稿修改后缓存失效。
+
+补充验证：instruction-only `design` 模式在本机成功生成带 `[笑]` 的中文示例，2.06 秒音频，冷启动约 42.4 秒；独立本地转写为“太好了，我们终于做到了。”，与目标台词一致（忽略标点）。输出位于 `outputs/breeze-design-smoke-20261026/`，未启动 H3 服务。扩展后的 H3 相关测试共 30 项通过。

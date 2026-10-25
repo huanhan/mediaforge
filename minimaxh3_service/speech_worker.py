@@ -7,9 +7,10 @@ from pathlib import Path
 MAX_AUDIO_FRAMES = 1500
 
 def inference_options(request):
-    options = {"id": "shot", "speaker": "S0", "text": request["text"],
-               "ref_audio_path": request["reference_audio"], "ref_text": request["reference_text"]}
-    if request.get("mode", "clone") == "direction":
+    options = {"id": "shot", "speaker": "S0", "text": request["text"]}
+    if request.get("mode", "clone") != "design":
+        options.update(ref_audio_path=request["reference_audio"], ref_text=request["reference_text"])
+    if request.get("mode", "clone") in {"direction", "design"}:
         options["instruction"] = request["instruction"]
     return options
 
@@ -96,7 +97,7 @@ def main():
         top_k=request["top_k"], repetition_penalty=float(request["repetition_penalty"]))
     runtime = FastBreezeStreamingRuntime(model, audio_tokenizer, config, tokenizer=tokenizer)
     segments = split_text(request["text"])
-    cfg = float(request["cfg_scale"]) if request.get("mode") == "direction" else 1.0
+    cfg = float(request["cfg_scale"]) if request.get("mode") in {"direction", "design"} else 1.0
     progress(.15)
     with torch.inference_mode(), sf.SoundFile(args.output, mode="w", samplerate=runtime.sample_rate,
                                              channels=1, subtype="PCM_16") as output:

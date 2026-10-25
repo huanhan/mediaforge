@@ -39,7 +39,7 @@ class SpeechRunner(MusicRunner):
         result = {"status": "ready" if not missing and not absent else "not_ready",
                 "backend": "breeze_tts", "model": "Breeze-TTS-2", "models_loaded": False,
                 "device": self.settings.tts_device, "presets": not absent, "voice_clone": not absent,
-                "modes": ["clone", "direction"], "speed_range": [0.5, 2.0], "speed_control": "postprocess-atempo",
+                "modes": ["clone", "direction", "design"], "speed_range": [0.5, 2.0], "speed_control": "postprocess-atempo",
                 "license": MANIFEST["license"], "license_url": MANIFEST["license_url"], "commercial_use": False,
                 "reference_text_required": True, "execution": "eager",
                 "languages": ["Chinese", "English", "Auto"],
@@ -94,7 +94,7 @@ class SpeechRunner(MusicRunner):
                     if not 3 <= duration <= 30:
                         raise ValueError("Reference recording must be between 3 and 30 seconds")
                     payload[field] = str(reference)
-                if not request.reference_file_id:
+                if request.mode != "design" and not request.reference_file_id:
                     reference = Path(__file__).with_name("voice_presets") / (request.speaker + ".wav")
                     if not reference.is_file():
                         raise RuntimeError("Default voice reference is missing; restore voice_presets")
@@ -121,7 +121,7 @@ class SpeechRunner(MusicRunner):
                             "license": MANIFEST["license"], "commercial_use": False, "speed_control": "postprocess-atempo",
                             "duration_seconds": frames / 24000, "sample_rate": 24000, "speed": request.speed,
                             "parameters": request.model_dump(exclude={"reference_file_id", "reference_text"}),
-                            "speaker": "recorded_voice" if request.reference_file_id else request.speaker}
+                            "speaker": "voice_design" if request.mode == "design" else "recorded_voice" if request.reference_file_id else request.speaker}
                 meta = output.path.with_suffix(".json")
                 meta.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
                 success = True

@@ -6,10 +6,14 @@ from .speech_models import SPEAKERS
 def add_speech_ui(client):
     import gradio as gr
 
-    def submit(text, speaker, language, speed, direction, instruction, cfg_scale, pause, volume, reference, reference_text):
+    def submit(text, speaker, source, instruction, cfg_scale, reference, reference_text):
         try:
-            result = client.submit_speech(dict(text=text, speaker=speaker, language=language, speed=speed,
-                mode="direction" if direction else "clone", instruction=instruction if direction else "", cfg_scale=cfg_scale, pause_ms=int(pause), volume_db=volume, **({"reference_text": reference_text} if reference and reference_text else {})), reference)
+            design = source == "design"
+            mode = "design" if design else "direction" if instruction.strip() else "clone"
+            result = client.submit_speech(dict(text=text, language="Auto",
+                mode=mode, instruction=instruction, cfg_scale=cfg_scale,
+                **({} if design else {"speaker": speaker}),
+                **({"reference_text": reference_text} if not design and reference and reference_text else {})), None if design else reference)
             return result["id"], f"已排队 · {result['id']}", None, {}, gr.Timer(active=True)
         except (ValueError, OSError, httpx.HTTPError) as exc:
             raise gr.Error(str(exc)) from exc
@@ -35,19 +39,19 @@ def add_speech_ui(client):
     gr.Markdown("### 本地 Breeze TTS 2 · 非商业使用\n模型与本地生成结果仅限研究及非商业使用，详见 docs/licenses/BREEZE_MODEL_LICENSE.txt。每次生成一个镜头的口播。支持预置音色和自己的录音；生成 WAV，可下载后用于视频。人物口型同步需另行制作。")
     with gr.Row():
         with gr.Column():
-            text = gr.Textbox(label="本镜头口播文本", lines=4, max_length=1000, value="你好，欢迎来到我的频道。今天一起了解一个有趣的知识。")
-            speaker = gr.Dropdown(list(SPEAKERS), value="Serena", label="预置音色")
-            language = gr.Dropdown(["Chinese", "English", "Auto"], value="Chinese", label="语言")
-            speed = gr.Slider(.5, 2, value=1, step=.05, label="语速（生成后保音高变速）")
-            direction = gr.Checkbox(value=False, label="启用表演指令（默认沿用录音语气）")
-            instruction = gr.Textbox(label="表演指令（情绪、语气、节奏）", value="自然清晰，像与观众交谈一样讲解。")
-            cfg_scale = gr.Slider(1, 6, value=4, step=.5, label="指令引导强度（仅表演模式）")
-            pause = gr.Slider(0, 2000, value=200, step=10, label="分段间停顿（毫秒，变速前）")
-            volume = gr.Slider(-12, 12, value=0, step=.5, label="输出音量（dB）")
-            with gr.Accordion("录制或上传自己的声音", open=False):
-                gr.Markdown("建议 10–20 秒，允许 3–30 秒，单人、清晰、无背景音乐。必须填写与参考录音完全一致的文字；录制音色同样支持情绪控制。视频工作室设置提供录音降噪与原声对比。麦克风需要 localhost / HTTPS。")
-                reference = gr.Audio(label="参考录音", sources=["upload", "microphone"], type="filepath")
-                reference_text = gr.Textbox(label="录音实际文字", lines=3)
+            text = gr.Textbox(label="要说的话", lines=4, max_length=1000, value="[笑] 你好，欢迎来到我的频道。")
+            gr.Examples([[s] for s in ["[笑] 太好了，我们终于做到了！", "[叹气] 没想到，你还记得我。", "[咳嗽] 不好意思，我们继续。", "[清嗓子] 各位，我有件事要说。", "(laugh) We did it!", "(sigh) You still remember me.", "(cough) Excuse me.", "(clears throat) Let us begin."]], inputs=[text], label="声音效果示例 · 点击填入")
+            source = gr.Dropdown([("参考音色 · 复刻声音", "reference"), ("文字设计 · 无需参考音频", "design")], value="reference", label="声音来源")
+            with gr.Column() as references:
+                speaker = gr.Dropdown(list(SPEAKERS), value="Serena", label="预置参考音色")
+                with gr.Accordion("录制或上传自己的声音", open=False):
+                    gr.Markdown("建议 10–15 秒，允许 3–30 秒，单人、清晰、无背景音乐。必须填写与参考录音完全一致的文字。麦克风需要 localhost / HTTPS。")
+                    reference = gr.Audio(label="参考录音", sources=["upload", "microphone"], type="filepath")
+                    reference_text = gr.Textbox(label="录音实际文字", lines=3)
+            instruction = gr.Textbox(label="表演指令 instruction（选填，留空沿用录音）", value="", lines=3)
+            cfg_scale = gr.Slider(1, 6, value=4, step=.5, label="CFG scale · 指令引导强度", visible=False)
+            source.change(lambda choice: (gr.Column(visible=choice!="design"), gr.Textbox(value="", label="声音描述 instruction（必填）" if choice=="design" else "表演指令 instruction（选填，留空沿用录音）"), gr.Slider(visible=choice=="design")), source, [references,instruction,cfg_scale])
+            instruction.change(lambda choice, value: gr.Slider(visible=choice=="design" or bool(value.strip())), [source,instruction], cfg_scale)
             start = gr.Button("生成本镜头配音", variant="primary")
         with gr.Column():
             status = gr.Markdown("等待提交")
@@ -55,7 +59,7 @@ def add_speech_ui(client):
             update = gr.Button("刷新状态")
             stop = gr.Button("取消配音任务")
     task, cached, timer = gr.State(""), gr.State({}), gr.Timer(3, active=False)
-    start.click(submit, [text,speaker,language,speed,direction,instruction,cfg_scale,pause,volume,reference,reference_text], [task,status,audio,cached,timer], concurrency_id="speech-task", concurrency_limit=1)
+    start.click(submit, [text,speaker,source,instruction,cfg_scale,reference,reference_text], [task,status,audio,cached,timer], concurrency_id="speech-task", concurrency_limit=1)
     for event in (timer.tick,update.click):
         event(refresh,[task,cached],[status,audio,cached,timer],concurrency_id="speech-task",concurrency_limit=1)
     def cancel(task_id):
