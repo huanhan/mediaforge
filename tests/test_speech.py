@@ -104,6 +104,36 @@ def test_api_shared_queue_and_download(speech):
         audio=next(o for o in state['outputs'] if o['filename'].endswith('.wav'))
         assert client.get(audio['download_url']).content[:4]==b'RIFF'
 
+
+def test_uploaded_voice_reaches_index_speaker_prompt_instead_of_default_preset(speech, monkeypatch):
+    runner, store = speech
+    source = store.input_root / 'personal.wav'
+    samples = b'\x10\x03\xf0\xfc' * (24000 * 2)
+    with wave.open(str(source), 'wb') as wav:
+        wav.setparams((1, 2, 24000, 0, 'NONE', 'not compressed'))
+        wav.writeframes(samples)
+    observed = []
+    original_run = runner._run
+
+    def inspect_worker(command, *args):
+        if '--request' in command:
+            payload = json.loads(Path(command[command.index('--request') + 1]).read_text(encoding='utf-8'))
+            options = inference_options(payload)
+            with wave.open(options['spk_audio_prompt'], 'rb') as wav:
+                observed.append(wav.readframes(wav.getnframes()))
+            assert options['spk_audio_prompt'].endswith('reference_audio.wav')
+            assert options['emo_audio_prompt'] is None
+            assert not options['use_emo_text']
+        return original_run(command, *args)
+
+    monkeypatch.setattr(runner, '_run', inspect_worker)
+    base = store.output_path('personal', 'speech/personal')
+    output = OutputArtifact('personal.wav', base.subfolder, base.path.with_suffix('.wav'))
+    artifacts = runner.generate(SpeechRequest(text='recorded sample', reference_file_id='personal.wav',
+        emotion_mode='reference'), output, threading.Event(), lambda _: None)
+    assert observed == [samples]
+    assert json.loads(artifacts[1].path.read_text(encoding='utf-8'))['speaker'] == 'recorded_voice'
+
 def test_cancel_before_start_and_model_missing(tmp_path):
     async def run():
         store=LocalAssetStore(tmp_path/'in',tmp_path/'out',1000)
