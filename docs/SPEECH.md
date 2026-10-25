@@ -1,67 +1,80 @@
-# IndexTTS 2.5 本地配音与音色克隆
+# Breeze TTS 2 本地配音
 
-采用官方 [IndexTTS](https://github.com/index-tts/index-tts) 的 `infer_v2_5.IndexTTS2` 和 [IndexTeam/IndexTTS-2.5](https://huggingface.co/IndexTeam/IndexTTS-2.5)。具体源码、模型 revision、文件大小和权重 SHA-256 固定在 `minimaxh3_service/index_tts_models.json`。
+本项目独立管理 [Breeze TTS 2](https://github.com/breezeblue-ai/breeze-tts) 推理、模型与依赖。视频工作室或其他客户端仅通过 HTTP 上传录音、提交任务、轮询与下载，不读取本项目目录、不启动本服务、不安装模型。
 
-文本转语音仅保留 IndexTTS 2.5 的安装、推理和接口实现，无旧引擎回退。情绪描述统一使用 `emotion_text`，不再接受旧 `instruct` 参数。IndexTTS 自带的 `qwen0.6bemo4-merge` 是文字情绪分析组件，必须保留；ASR、歌词对齐和 H3 视频文本编码器也不属于旧 TTS，仍由各自模块使用。
+## 替换影响
+
+- 旧 IndexTTS 安装器、权重清单和推理实现已移除，不再回退。
+- 保留 `/v1/audio/speech` 和 `/v1/tasks` 任务协议、共享 GPU 队列、24 kHz 单声道 WAV 输出；模型改为 `Breeze-TTS-2`。
+- 原有八维情绪、独立情绪参考、模型原生语速等字段已移除。新调用使用 `mode`、`instruction`、`cfg_scale`，旧字段返回 422。
+- 自录音色必须同时提交参考录音和准确完整的文字稿；预设录音由本服务提供对应文字。
+- 本地权重支持中文和英语。旧客户端需更新后使用。
+- 普通 eager 模式单请求运行，任务结束释放显存；不启用高显存 fast-all，也不在 API 进程加载模型。
 
 ## 安装
 
+先阅读 [完整模型许可](licenses/BREEZE_MODEL_LICENSE.txt)。仅允许研究和非商业用途，本地生成结果也受限制。用户须自行确认其用途并接受许可后执行：
+
 ```powershell
-.venv\Scripts\python.exe -m minimaxh3_service.setup_tts
-.venv\Scripts\python.exe main.py
+.venv/Scripts/python.exe -m minimaxh3_service.setup_tts --accept-non-commercial-license
 ```
 
-安装器使用 uv 创建 `.runtime/index-tts-env` Python 3.11 环境，安装 Torch/Torchaudio 2.8 CUDA 12.8 与固定源码到 `.runtime/index-tts-src`，SentencePiece 固定 0.2.1（0.2.2 Windows wheel 在本机导入崩溃）。模型及辅助权重约 7.9 GiB，位于 `models/tts/IndexTTS-2.5`。需 PATH 中 FFmpeg。模型下载校验大小及权重 SHA-256；推理禁用自动联网补模型，不需要 NLTK 语料。
+安装器固定源码、模型 revision 和 SHA-256（`minimaxh3_service/breeze_tts_models.json`），使用 uv 创建独立 CPython 3.11 环境（不继承系统 Conda）：
 
-支持 `--models-only`、`--runtime-only`；可设置 `H3_TTS_PYTHON`、`H3_TTS_MODEL_PATH`、`H3_TTS_DEVICE`、`H3_TTS_TIMEOUT_SECONDS`。旧环境变量若指向 Qwen 解释器，请更新。默认在 CUDA 用 BF16，关闭需编译的 CUDA kernel、DeepSpeed 和 torch.compile。模型随独立 worker 退出释放显存，与 H3 视频共用串行 GPU 队列。
+- `.runtime/breeze-tts-env`：Torch/Torchaudio 2.9.1 CUDA 12.8 及上游依赖。
+- `.runtime/breeze-tts-src`：固定版本的 Apache-2.0 推理源码。
+- `models/tts/Breeze-TTS-2`：约 7.2 GiB 模型文件、原许可、NOTICE 和本机接受记录。
 
-`GET /v1/models` 的 `capabilities.speech` 返回就绪状态、后端 `index_tts`、语言与情绪能力。更新代码后需重启 API 才会使用新后端。
+默认支持在本机 Windows 中以 eager 路径运行；上游主要文档面向 Linux，Linux 环境的 Python 位于 `bin/python`。不安装 FlashAttention、不启用 Torch compile/CUDA graphs。需 FFmpeg 在 PATH。Breeze 使用上游 Qwen3 音频 tokenizer；它是 Breeze 必需的编解码依赖，并非旧 Qwen TTS 推理后端。
+
+`--models-only` / `--runtime-only` 可以分别准备权重与环境，仍需显式许可参数。模型不打入便携包，不在推理时下载。若曾设置 `H3_TTS_PYTHON`，请改为新的独立环境；`H3_TTS_MODEL_PATH` 为 `models/tts` 的父级配置根，`H3_TTS_DEVICE` 默认 cuda。API 需由使用者手动重启以加载代码，安装器不会启动服务。
+
+`GET /v1/models` 的 `capabilities.speech` 提供后端 `breeze_tts`、就绪状态、语言、模式、语速处理方式和非商业许可链接。就绪检查不加载权重；真实生成仍可能受空闲显存影响。官方建议普通推理至少 12GB 显存，视频模型需先释放，由共享队列串行管理。
 
 ## 接口
 
-每请求对应一个镜头，最多 1000 字。
-
 ```json
 {
-  "model": "IndexTTS-2.5",
-  "text": "你好，欢迎来到我的频道。",
+  "text": "[叹气] 没想到过了这么久，你还记得我的声音。",
+  "model": "Breeze-TTS-2",
   "speaker": "Serena",
   "language": "Chinese",
-  "speed": 1.1,
-  "emotion_mode": "reference",
+  "mode": "clone",
+  "speed": 1,
   "pause_ms": 200,
-  "volume_db": 0,
   "seed": 42
 }
 ```
 
-POST `/v1/audio/speech` 返回 202 + id，GET `/v1/tasks/{id}` 查询并下载 WAV 与参数/时长 JSON。输出 24kHz 单声道 PCM16，沿用鉴权、取消与队列策略。
+上传音频：POST `/v1/files`，`kind=audio`。复刻时用 `reference_file_id` 和 `reference_text` 替代预设音色；录音 3–30 秒，建议 10–15 秒干净单人语音，文字须与完整录音一致。不能循环拼接音频或填写与录音不同的文案。
 
-语速 0.5–2× 映射到模型 `duration_factor=1/speed`，不再使用 FFmpeg atempo。实际长度由模型生成，倍率不是精确时长保证。语言为 Chinese、English、Japanese、Spanish、Arabic、Auto。自动识别限制在上述五种语言，短文本建议明确选择。
+- `mode=clone`：不传入任何额外表演指令，CFG 固定为 1，优先保留参考声线与语气。
+- `mode=direction`：需要 `instruction`，可描述情绪、节奏、表达方式；`cfg_scale` 为指令引导系数 1–6，默认 4。它不等于情绪百分比，不保证精确控制任意表演。
+- 中文 `[笑]`、`[叹气]`、`[咳嗽]`，英文 `(laugh)`、`(sigh)`、`(cough)` 直接写在台词中。
+- `speed` 0.5–2：合成后通过 FFmpeg atempo 保音高变速；不是模型原生时长控制。
+- `pause_ms` 0–2000：换行/长文本分段之间追加的静音，随后与整段一起变速，不是每个标点的停顿。
+- `volume_db` -12–12；temperature .1–1.5（默认 .9），top_p .1–1（默认 1），top_k 1–100（默认 50），repetition_penalty 1–2（默认 1.1），seed。
 
-情绪模式（默认 `reference`，先保留参考录音的说话方式）：
-- `text`：`emotion_text` 使用本地 0.6B 情绪分析器映射到八维情绪。
-- `vector`：`emotion_vector` 为八个 0–1 数值，顺序是 happy、angry、sad、afraid、disgusted、melancholic、surprised、calm。`emotion_strength` 为总强度。
-- `reference`：可传 `emotion_reference_file_id`，借用独立音频的情绪；省略时沿用说话人样本，模型强制使用样本完整情绪。
+每个请求最多 1000 字，自动按句子/长度分段，命中音频 token 上限会报错而不是发布截断台词。输出 JSON 记录模型、参数、非商业许可与变速方式。任务可取消、失败清理未完成输出。字幕和人物口型同步另行制作。
 
-文字情绪是额外的情绪向量条件，并非无处理的克隆；即使“自然、平静”也可能改变音高和声线感受。需要角色表演时主动开启 `text` 或 `vector`，先试听再调整。Gradio 默认不勾选额外文字情绪。
+## 预设与许可
 
-其他参数：`pause_ms` 0–2000（内部文本分段之间），`volume_db` -12–12，`temperature` .1–1.5，`top_p` .1–1，`top_k` 1–100，`repetition_penalty` 1–20，`max_segment_tokens` 40–200，`text_normalization` 布尔值。默认值见 OpenAPI；文本规范化的具体支持由上游各语言前端决定。
+九个历史预设 ID 保留，默认 Serena。它们是固定的合成参考 WAV，不是 Breeze 内置说话人。来源和文字保存在 `voice_presets/manifest.json`，不代表支持参考语言的输出或方言。
 
-音色克隆先 POST `/v1/files` 上传 `kind=audio`，然后传 `reference_file_id`。录音 3–30 秒，建议 10–15 秒；上游最多使用参考前 15 秒。`reference_text` 可选（仅作兼容备注）。克隆音色也支持全部情绪参数。
+推理代码 Apache-2.0 与模型的非商业许可严格分开。见 `docs/licenses/`、`THIRD_PARTY_NOTICES.md` 和下载目录的 LICENSE/NOTICE。项目代码开放不授予模型或本地输出商用权。模型权重分发须附完整原许可、NOTICE、保留归属，并仅供研究或非商业用途；衍生模型仍受同一许可限制。云服务订阅不授权本地商用。
 
-九个历史预设 ID 保留，默认 Serena；`voice_presets/` 包含由旧引擎一次性生成的固定合成参考录音，来源记录在 manifest 和 README。后续推理只使用 IndexTTS 克隆这些样本，无需 Qwen 模型；音色表现可能与旧引擎不同。参考录音的语言不代表输出模型支持该语言。
+## 本机验证（2026-10-26）
 
-## 视频工作室
+Windows、RTX 4070 Ti 12GB、独立 CPython 3.11、Torch 2.9.1 CUDA 12.8，BF16 eager。
+通过一次性 `SpeechRunner` 调用验证，未启动或重启 H3 API 服务。每次均重新加载模型，耗时含模型加载与 FFmpeg 后处理：
 
-设置中支持默认音色和所有控制参数、多语言／自填文本试听、录制／拖拽上传音色。自录音频默认轻度 FFmpeg 预处理（高通、温和降噪、首尾静音整理、有限增益与峰值限制），提供原始／处理后对比，保存规范化原始 WAV 与处理后 WAV。此流程位于视频工作室服务器，H3 API 收到的是已选定的参考音频；H3 的独立 Gradio 录音入口不执行该增强流程。
+| 场景 | 输出时长 | 耗时 |
+| --- | ---: | ---: |
+| Serena 中文纯复刻 | 5.03 秒 | 85.7 秒 |
+| 中文表演指令，CFG 4，1.15× 语速 | 2.30 秒 | 60.4 秒 |
+| 本机已保存录音，准确文字稿，纯复刻 | 2.71 秒 | 59.2 秒 |
+| Ryan 英语纯复刻 | 2.23 秒 | 42.0 秒 |
 
-每个镜头一个配音节点，连接视频生成配置，点击视频生成时合成或复用当前配音并写入视频结果。更改参数使旧音频失效；超长台词提示调整，不截断。节点可以应用已保存默认参数，也可独立控制。错误旧连线不阻止打开画布。详见视频工作室 `docs/speech.md`。
+四份音频均为非静音的完整 24 kHz 单声道 PCM WAV。独立本地 SenseVoice 转写与目标台词一致（忽略英文大小写与标点）；这验证内容完整性，不等于主观音质、情感表现或说话人相似度评测。12GB 保守路径可以运行，但当前冷启动试听不是即时播放。测试输出保存在本机 `outputs/breeze-smoke-20261026/`，不随代码分发。
 
-源码和模型按上游提供的 LICENSE / MODEL_LICENSE 使用，许可文本随下载源保存；不要将旧 Qwen 的 Apache-2.0 许可误套到 IndexTTS 模型上。
-
-## 本机验证（2026-10-25）
-
-RTX 4070 Ti 12GB，本地离线推理，同一句中文、同一音色与种子：1× 为 5.700 秒，1.35× 为 4.226 秒。完整 SpeechRunner 使用经过前端同一预处理流程的参考样本，分别验证八维情绪和独立情绪参考，输出 24kHz 单声道 WAV，时长为 4.064 / 4.029 秒，含启动加载耗时约 50.1 / 71.6 秒。
-
-实际音频和参数记录保存在本机 `outputs/index-tts-smoke/`，汇总为 `validation.json`。参考样本是预置合成声音，不是用户真实麦克风测试；本次为功能验证，不是主观音质评分或识别准确率评测。前端相关 29 项测试、H3 语音/接口/配置/打包相关 60 项测试通过；前端类型检查、画布构建和生产构建通过。
+H3 配音、安装许可、OpenAPI、Gradio 相关测试共 26 项通过。客户端另验证默认参数、旧画布迁移、逐镜配音合成、录音管理，以及文字稿修改后缓存失效。

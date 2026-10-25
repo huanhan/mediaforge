@@ -23,7 +23,7 @@ class Settings:
     max_queue_size: int = 8
     idle_release_seconds: float = 5.0
     upscale_idle_release_seconds: float = 5.0
-    tts_python: Path = Path(".runtime/index-tts-env/Scripts/python.exe" if os.name == "nt" else ".runtime/index-tts-env/bin/python")
+    tts_python: Path = Path(".runtime/breeze-tts-env/Scripts/python.exe" if os.name == "nt" else ".runtime/breeze-tts-env/bin/python")
     tts_model_path: Path = Path("models/tts")
     tts_device: str = "cuda"
     tts_timeout_seconds: float = 1800.0

@@ -1,0 +1,85 @@
+{
+  "source_repo": "breezeblue-ai/breeze-tts",
+  "source_revision": "6eba901d1845353802652c708a4740fdfc5baa75",
+  "license": "BreezeBlue Research and Non-Commercial License 1.1",
+  "license_url": "https://huggingface.co/BreezeBlue/Breeze-TTS-2/blob/main/LICENSE",
+  "models": [
+    {
+      "repo": "BreezeBlue/Breeze-TTS-2",
+      "revision": "3e28c5151381a722f1d8661b4118c298caa77aa4",
+      "destination": "",
+      "files": [
+        {
+          "name": "LICENSE",
+          "size": 18719,
+          "sha256": "f158b88cd51473925e1ce8c39f4c7c9e419304ad71371896c4ff18fa1351dca2"
+        },
+        {
+          "name": "README.md",
+          "size": 9818,
+          "sha256": "0d15450e77dae7a606ce692d904d25e508111187ec95f14901d7d848e8ad5a19"
+        },
+        {
+          "name": "audio_tokenizer/config.json",
+          "size": 2336,
+          "sha256": "ee65bb901c876664ab8707c487157aa1a6ee57c65969b28fb5ec9dc211e68167"
+        },
+        {
+          "name": "audio_tokenizer/configuration.json",
+          "size": 76,
+          "sha256": "6bc26d64eb5024b4d1dab5a52371958b429256d6c9d59787f1f5294a54e0cebd"
+        },
+        {
+          "name": "audio_tokenizer/model.safetensors",
+          "size": 682293092,
+          "sha256": "836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258"
+        },
+        {
+          "name": "audio_tokenizer/preprocessor_config.json",
+          "size": 234,
+          "sha256": "fcb3805e597e786d4067706e602f6688524640f8d3396790e2e09b5942fcbdfb"
+        },
+        {
+          "name": "config.json",
+          "size": 10161,
+          "sha256": "57849eb756ca1602efe89afcc5c70379dd127f8deeb9f655204d4340190ea929"
+        },
+        {
+          "name": "generation_config.json",
+          "size": 251,
+          "sha256": "2ef3f2c0ab8d9ad241059138a795433c5410fd9954efb9625674ecd2a9529434"
+        },
+        {
+          "name": "model-00001-of-00002.safetensors",
+          "size": 4961989890,
+          "sha256": "abf813781256e10cbe81f2dbb415f897556225d4dfa0282d67aa8ea164e114a9"
+        },
+        {
+          "name": "model-00002-of-00002.safetensors",
+          "size": 2004567152,
+          "sha256": "36aa73b1a11361e1774db90d9c63c63303b294c022de112aa51904d940edcef1"
+        },
+        {
+          "name": "model.safetensors.index.json",
+          "size": 109004,
+          "sha256": "19977e3d96bb502ed3165b48adff094f6bd71ec3d349940d1a3ba6a0060bd5e3"
+        },
+        {
+          "name": "special_tokens_map.json",
+          "size": 886,
+          "sha256": "194f265bb588d142a16f27d9576104eb3dab3d7ba9961541d2d6e3d5e77e6470"
+        },
+        {
+          "name": "tokenizer.json",
+          "size": 33386945,
+          "sha256": "d3ec9ac3eb2392389b9f5112e85d8b43316494addb587ba7b7a9d61eac23af96"
+        },
+        {
+          "name": "tokenizer_config.json",
+          "size": 1157960,
+          "sha256": "2c084fd6725c2284e8aa6da095a8d036d48fe79665595bfcd50371821b620e44"
+        }
+      ]
+    }
+  ]
+}

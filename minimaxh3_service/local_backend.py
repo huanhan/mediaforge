@@ -212,7 +212,7 @@ class LocalGenerationBackend:
                 raise BackendError("Voice reference must be uploaded audio", status_code=422, code="invalid_audio")
         readiness = await asyncio.to_thread(self.tasks.speech_runner.readiness)
         if readiness.get("status") != "ready":
-            raise BackendError("IndexTTS 2.5 is not installed; run python -m minimaxh3_service.setup_tts",
+            raise BackendError("Breeze TTS 2 is not ready; see docs/SPEECH.md and setup_tts --accept-non-commercial-license",
                                status_code=503, code="speech_not_ready", detail=readiness)
         return await self.tasks.submit_speech(request)
 

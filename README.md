@@ -330,4 +330,4 @@ Gradio `/ui/` 通过“视频生成”和“视频编辑”独立 Tab 区分功�
 
 ## 本地文本转语音
 
-支持 IndexTTS 2.5 本地音色克隆、原生语速与情绪控制，逐镜头口播使用 `POST /v1/audio/speech`，与 H3 共用 GPU 队列。安装、接口和视频工作室用法见 [SPEECH.md](docs/SPEECH.md)。
+支持 Breeze TTS 2 本地音色克隆、表演指令与保音高后处理变速（模型及输出仅限研究和非商业使用），逐镜头口播使用 `POST /v1/audio/speech`，与 H3 共用 GPU 队列。安装、接口和视频工作室用法见 [SPEECH.md](docs/SPEECH.md)。

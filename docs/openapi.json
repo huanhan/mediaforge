@@ -565,7 +565,7 @@
           "speech"
         ],
         "summary": "Synthesize one shot with a preset or recorded voice",
-        "description": "Local IndexTTS 2.5 with native speed and emotion control. Clone with an uploaded 3–30 second reference_file_id; reference_text is optional. Poll the shared /v1/tasks queue; returns 24 kHz mono WAV and metadata. Does not perform lip synchronization.",
+        "description": "Local Breeze TTS 2 for research/non-commercial use. Clone with a 3–30 second reference_file_id and its exact reference_text. mode=clone preserves delivery; mode=direction uses instruction and cfg_scale. speed is pitch-preserving postprocessing; pause_ms separates text chunks before speed adjustment. Supports Chinese/English. Poll the shared /v1/tasks queue; returns 24 kHz mono WAV and metadata. Does not perform lip synchronization.",
         "operationId": "create_speech",
         "requestBody": {
           "content": {
@@ -2513,19 +2513,16 @@
           },
           "model": {
             "type": "string",
-            "const": "IndexTTS-2.5",
+            "const": "Breeze-TTS-2",
             "title": "Model",
-            "default": "IndexTTS-2.5"
+            "default": "Breeze-TTS-2"
           },
           "language": {
             "type": "string",
             "enum": [
               "Auto",
               "Chinese",
-              "English",
-              "Japanese",
-              "Spanish",
-              "Arabic"
+              "English"
             ],
             "title": "Language",
             "default": "Chinese"
@@ -2563,50 +2560,27 @@
             "title": "Speed",
             "default": 1
           },
-          "emotion_mode": {
+          "mode": {
             "type": "string",
             "enum": [
-              "reference",
-              "text",
-              "vector"
+              "clone",
+              "direction"
             ],
-            "title": "Emotion Mode",
-            "default": "reference"
+            "title": "Mode",
+            "default": "clone"
           },
-          "emotion_text": {
+          "instruction": {
             "type": "string",
             "maxLength": 500,
-            "title": "Emotion Text",
-            "default": "自然、平静地讲述。"
+            "title": "Instruction",
+            "default": ""
           },
-          "emotion_strength": {
+          "cfg_scale": {
             "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Emotion Strength",
-            "default": 0.65
-          },
-          "emotion_vector": {
-            "items": {
-              "type": "number"
-            },
-            "type": "array",
-            "maxItems": 8,
-            "minItems": 8,
-            "title": "Emotion Vector"
-          },
-          "emotion_reference_file_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 512,
-                "minLength": 1
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Emotion Reference File Id"
+            "maximum": 6.0,
+            "minimum": 1.0,
+            "title": "Cfg Scale",
+            "default": 4
           },
           "pause_ms": {
             "type": "integer",
@@ -2627,40 +2601,28 @@
             "maximum": 1.5,
             "minimum": 0.1,
             "title": "Temperature",
-            "default": 0.8
+            "default": 0.9
           },
           "top_p": {
             "type": "number",
             "maximum": 1.0,
             "minimum": 0.1,
             "title": "Top P",
-            "default": 0.8
+            "default": 1
           },
           "top_k": {
             "type": "integer",
             "maximum": 100.0,
             "minimum": 1.0,
             "title": "Top K",
-            "default": 30
+            "default": 50
           },
           "repetition_penalty": {
             "type": "number",
-            "maximum": 20.0,
+            "maximum": 2.0,
             "minimum": 1.0,
             "title": "Repetition Penalty",
-            "default": 10
-          },
-          "max_segment_tokens": {
-            "type": "integer",
-            "maximum": 200.0,
-            "minimum": 40.0,
-            "title": "Max Segment Tokens",
-            "default": 120
-          },
-          "text_normalization": {
-            "type": "boolean",
-            "title": "Text Normalization",
-            "default": true
+            "default": 1.1
           },
           "seed": {
             "type": "integer",
@@ -3419,7 +3381,7 @@
   "tags": [
     {
       "name": "speech",
-      "description": "Local IndexTTS 2.5 speech synthesis and recorded voice cloning, one request per shot."
+      "description": "Local non-commercial Breeze TTS 2 speech synthesis and recorded voice cloning, one request per shot."
     },
     {
       "name": "transcription",

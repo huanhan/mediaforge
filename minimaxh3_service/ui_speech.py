@@ -6,10 +6,10 @@ from .speech_models import SPEAKERS
 def add_speech_ui(client):
     import gradio as gr
 
-    def submit(text, speaker, language, speed, style_emotion, emotion_text, strength, pause, volume, reference, reference_text):
+    def submit(text, speaker, language, speed, direction, instruction, cfg_scale, pause, volume, reference, reference_text):
         try:
             result = client.submit_speech(dict(text=text, speaker=speaker, language=language, speed=speed,
-                emotion_mode="text" if style_emotion else "reference", emotion_text=emotion_text, emotion_strength=strength, pause_ms=int(pause), volume_db=volume, **({"reference_text": reference_text} if reference and reference_text else {})), reference)
+                mode="direction" if direction else "clone", instruction=instruction if direction else "", cfg_scale=cfg_scale, pause_ms=int(pause), volume_db=volume, **({"reference_text": reference_text} if reference and reference_text else {})), reference)
             return result["id"], f"已排队 · {result['id']}", None, {}, gr.Timer(active=True)
         except (ValueError, OSError, httpx.HTTPError) as exc:
             raise gr.Error(str(exc)) from exc
@@ -32,20 +32,20 @@ def add_speech_ui(client):
         except (ValueError, OSError, httpx.HTTPError) as exc:
             return f"查询失败，可刷新重试：{exc}", gr.skip(), gr.skip(), gr.Timer(active=False)
 
-    gr.Markdown("### 本地 IndexTTS 2.5\n每次生成一个镜头的口播。支持预置音色和自己的录音；生成 WAV，可下载后用于视频。人物口型同步需另行制作。")
+    gr.Markdown("### 本地 Breeze TTS 2 · 非商业使用\n模型与本地生成结果仅限研究及非商业使用，详见 docs/licenses/BREEZE_MODEL_LICENSE.txt。每次生成一个镜头的口播。支持预置音色和自己的录音；生成 WAV，可下载后用于视频。人物口型同步需另行制作。")
     with gr.Row():
         with gr.Column():
             text = gr.Textbox(label="本镜头口播文本", lines=4, max_length=1000, value="你好，欢迎来到我的频道。今天一起了解一个有趣的知识。")
             speaker = gr.Dropdown(list(SPEAKERS), value="Serena", label="预置音色")
-            language = gr.Dropdown(["Chinese", "English", "Auto", "Japanese", "Spanish", "Arabic"], value="Chinese", label="语言")
-            speed = gr.Slider(.5, 2, value=1, step=.05, label="语速（模型原生控制）")
-            style_emotion = gr.Checkbox(value=False, label="使用额外文字情绪（默认沿用录音语气）")
-            emotion_text = gr.Textbox(label="情绪描述（预置和录音音色均生效）", value="自然清晰，像与观众交谈一样讲解。")
-            strength = gr.Slider(0, 1, value=.65, step=.05, label="情绪总强度")
-            pause = gr.Slider(0, 2000, value=200, step=10, label="分段间停顿（毫秒）")
+            language = gr.Dropdown(["Chinese", "English", "Auto"], value="Chinese", label="语言")
+            speed = gr.Slider(.5, 2, value=1, step=.05, label="语速（生成后保音高变速）")
+            direction = gr.Checkbox(value=False, label="启用表演指令（默认沿用录音语气）")
+            instruction = gr.Textbox(label="表演指令（情绪、语气、节奏）", value="自然清晰，像与观众交谈一样讲解。")
+            cfg_scale = gr.Slider(1, 6, value=4, step=.5, label="指令引导强度（仅表演模式）")
+            pause = gr.Slider(0, 2000, value=200, step=10, label="分段间停顿（毫秒，变速前）")
             volume = gr.Slider(-12, 12, value=0, step=.5, label="输出音量（dB）")
             with gr.Accordion("录制或上传自己的声音", open=False):
-                gr.Markdown("建议 10–20 秒，允许 3–30 秒，单人、清晰、无背景音乐。录音文字可选；录制音色同样支持情绪控制。视频工作室设置提供录音降噪与原声对比。麦克风需要 localhost / HTTPS。")
+                gr.Markdown("建议 10–20 秒，允许 3–30 秒，单人、清晰、无背景音乐。必须填写与参考录音完全一致的文字；录制音色同样支持情绪控制。视频工作室设置提供录音降噪与原声对比。麦克风需要 localhost / HTTPS。")
                 reference = gr.Audio(label="参考录音", sources=["upload", "microphone"], type="filepath")
                 reference_text = gr.Textbox(label="录音实际文字", lines=3)
             start = gr.Button("生成本镜头配音", variant="primary")
@@ -55,7 +55,7 @@ def add_speech_ui(client):
             update = gr.Button("刷新状态")
             stop = gr.Button("取消配音任务")
     task, cached, timer = gr.State(""), gr.State({}), gr.Timer(3, active=False)
-    start.click(submit, [text,speaker,language,speed,style_emotion,emotion_text,strength,pause,volume,reference,reference_text], [task,status,audio,cached,timer], concurrency_id="speech-task", concurrency_limit=1)
+    start.click(submit, [text,speaker,language,speed,direction,instruction,cfg_scale,pause,volume,reference,reference_text], [task,status,audio,cached,timer], concurrency_id="speech-task", concurrency_limit=1)
     for event in (timer.tick,update.click):
         event(refresh,[task,cached],[status,audio,cached,timer],concurrency_id="speech-task",concurrency_limit=1)
     def cancel(task_id):

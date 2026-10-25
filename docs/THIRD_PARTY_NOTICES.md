@@ -30,12 +30,21 @@ https://huggingface.co/yzd-v/DWPose. Download locations and SHA-256 checksums
 are recorded in minimaxh3_service/pose_models.json. These optional models are
 not bundled with the application. Setup and API details are in SKELETON.md.
 
-## Optional IndexTTS 2.5 speech
+## Optional Breeze TTS 2 speech
 
-The optional installer downloads pinned IndexTTS source and weights. Their
-bilibili Model Use License Agreement is retained in the downloaded source;
-see https://github.com/index-tts/index-tts and index_tts_models.json for versions.
-The application bundles nine synthetic voice-reference WAVs generated with
-Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0). They are not user recordings.
-Source revision and file hashes are in minimaxh3_service/voice_presets/manifest.json.
-These fixed samples preserve preset IDs; synthesis uses only IndexTTS 2.5.
+Breeze inference source is Apache-2.0 (docs/licenses/BREEZE_CODE_LICENSE.txt).
+Model weights, derivatives and self-hosted outputs use the separate BreezeBlue
+Research and Non-Commercial License 1.1 (docs/licenses/BREEZE_MODEL_LICENSE.txt).
+Source and checkpoint revisions/hashes are pinned in breeze_tts_models.json.
+The installer requires explicit non-commercial acceptance and preserves the
+upstream LICENSE and NOTICE with the checkpoint. We do not bundle model weights.
+
+Breeze TTS 2 is licensed under the BreezeBlue Research and Non-Commercial License
+Agreement. Copyright (c) 2026 RESONIA, INC. All Rights Reserved.
+
+The audio tokenizer is based on Qwen3-TTS by the Alibaba Qwen Team (Apache-2.0).
+This required codec is not a separate Qwen TTS synthesis backend.
+
+Fixed voice reference WAVs were originally generated with Qwen3-TTS CustomVoice
+(Apache-2.0). Their provenance and exact transcripts are retained in
+voice_presets/manifest.json. Current synthesis uses only Breeze TTS 2.

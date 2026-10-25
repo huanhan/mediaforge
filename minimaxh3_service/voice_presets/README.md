@@ -1,14 +1,12 @@
-# Bundled voice references
+# Fixed reference voices
 
-These synthetic reference clips preserve the application's existing preset IDs
-when migrating to IndexTTS 2.5. They were generated locally with
-Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0), not recordings of users.
-See manifest.json for model revision, speaker and reference text.
+These WAV files preserve existing preset IDs; they are not built-in Breeze voices.
+They were generated once with Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0).
+Exact text, source revision, language and file hashes are in manifest.json.
+Breeze TTS 2 clones these references using the corresponding exact transcript.
+There is no legacy TTS fallback. The reference language/accent does not guarantee
+output language/dialect support; the local Breeze weights support Chinese/English.
 
-IndexTTS clones these fixed reference WAVs at inference time. No Qwen3-TTS
-runtime or model is required to use the presets. Voice characteristics can
-differ from the previous engine. The reference speaker's language does not
-extend IndexTTS's supported output languages (ZH, EN, JA, ES, AR).
-
-Qwen3-TTS: https://github.com/QwenLM/Qwen3-TTS
-IndexTTS: https://github.com/index-tts/index-tts
+Breeze model and self-hosted outputs are for research and non-commercial use:
+https://huggingface.co/BreezeBlue/Breeze-TTS-2/blob/main/LICENSE
+Original reference source: https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice

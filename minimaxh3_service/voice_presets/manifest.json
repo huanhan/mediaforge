@@ -3,7 +3,7 @@
     "file": "Serena.wav",
     "text": "你好，欢迎来到我的频道。今天，我们一起把复杂的事情讲清楚，让每一次表达都自然、真诚。",
     "language": "Chinese",
-    "origin": "Synthetic reference generated once with Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0). All subsequent synthesis uses IndexTTS 2.5.",
+    "origin": "Synthetic reference generated once with Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0). Synthesis uses these fixed references with Breeze TTS 2.",
     "source_model": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
     "source_revision": "0c0e3051f131929182e2c023b9537f8b1c68adfe",
     "sha256": "21a7e26f070159d37728f7c32e11cd3bbe358b7320b285440d19365877aaefe3"
@@ -12,7 +12,7 @@
     "file": "Vivian.wav",
     "text": "你好，欢迎来到我的频道。今天，我们一起把复杂的事情讲清楚，让每一次表达都自然、真诚。",
     "language": "Chinese",
-    "origin": "Synthetic reference generated once with Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0). All subsequent synthesis uses IndexTTS 2.5.",
+    "origin": "Synthetic reference generated once with Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0). Synthesis uses these fixed references with Breeze TTS 2.",
     "source_model": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
     "source_revision": "0c0e3051f131929182e2c023b9537f8b1c68adfe",
     "sha256": "82391a8208e0dffa3ffcb8d7f0683ff8ecaafe533827188d0d892e1efa0ef249"
@@ -21,7 +21,7 @@
     "file": "Uncle_Fu.wav",
     "text": "你好，欢迎来到我的频道。今天，我们一起把复杂的事情讲清楚，让每一次表达都自然、真诚。",
     "language": "Chinese",
-    "origin": "Synthetic reference generated once with Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0). All subsequent synthesis uses IndexTTS 2.5.",
+    "origin": "Synthetic reference generated once with Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0). Synthesis uses these fixed references with Breeze TTS 2.",
     "source_model": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
     "source_revision": "0c0e3051f131929182e2c023b9537f8b1c68adfe",
     "sha256": "6a10e50c901040848fed0e264d858089b1060d821a33d0f341852daf2205caec"
@@ -30,7 +30,7 @@
     "file": "Dylan.wav",
     "text": "你好，欢迎来到我的频道。今天，我们一起把复杂的事情讲清楚，让每一次表达都自然、真诚。",
     "language": "Chinese",
-    "origin": "Synthetic reference generated once with Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0). All subsequent synthesis uses IndexTTS 2.5.",
+    "origin": "Synthetic reference generated once with Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0). Synthesis uses these fixed references with Breeze TTS 2.",
     "source_model": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
     "source_revision": "0c0e3051f131929182e2c023b9537f8b1c68adfe",
     "sha256": "d6172f076eb209e63f43238983ae33b5e158688a2be5ac01e5432ea333dad337"
@@ -39,7 +39,7 @@
     "file": "Eric.wav",
     "text": "你好，欢迎来到我的频道。今天，我们一起把复杂的事情讲清楚，让每一次表达都自然、真诚。",
     "language": "Chinese",
-    "origin": "Synthetic reference generated once with Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0). All subsequent synthesis uses IndexTTS 2.5.",
+    "origin": "Synthetic reference generated once with Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0). Synthesis uses these fixed references with Breeze TTS 2.",
     "source_model": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
     "source_revision": "0c0e3051f131929182e2c023b9537f8b1c68adfe",
     "sha256": "a03346d276bd5cd35120a47180cf7d9c632574eed43ddbb861222de1c61662dd"
@@ -48,7 +48,7 @@
     "file": "Ryan.wav",
     "text": "Hello, welcome to my channel. Today we will explore something interesting and make complicated things easy to understand.",
     "language": "English",
-    "origin": "Synthetic reference generated once with Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0). All subsequent synthesis uses IndexTTS 2.5.",
+    "origin": "Synthetic reference generated once with Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0). Synthesis uses these fixed references with Breeze TTS 2.",
     "source_model": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
     "source_revision": "0c0e3051f131929182e2c023b9537f8b1c68adfe",
     "sha256": "1c68c3098a31102cf18058990aad835f2ea91172e7d397185c2abfc861ac48a1"
@@ -57,7 +57,7 @@
     "file": "Aiden.wav",
     "text": "Hello, welcome to my channel. Today we will explore something interesting and make complicated things easy to understand.",
     "language": "English",
-    "origin": "Synthetic reference generated once with Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0). All subsequent synthesis uses IndexTTS 2.5.",
+    "origin": "Synthetic reference generated once with Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0). Synthesis uses these fixed references with Breeze TTS 2.",
     "source_model": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
     "source_revision": "0c0e3051f131929182e2c023b9537f8b1c68adfe",
     "sha256": "1ec3d7406093ecd86b4227de7bfba92ace4df493e1e85c5346ecab381b40c039"
@@ -66,7 +66,7 @@
     "file": "Ono_Anna.wav",
     "text": "こんにちは、私のチャンネルへようこそ。今日は、毎日の暮らしの中にある素敵な発見を、一緒に楽しみましょう。",
     "language": "Japanese",
-    "origin": "Synthetic reference generated once with Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0). All subsequent synthesis uses IndexTTS 2.5.",
+    "origin": "Synthetic reference generated once with Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0). Synthesis uses these fixed references with Breeze TTS 2.",
     "source_model": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
     "source_revision": "0c0e3051f131929182e2c023b9537f8b1c68adfe",
     "sha256": "c5b4c46daebd114125191cebb5e158da3902d9d3778c1d9e9b7eb9c5ab93ada9"
@@ -75,7 +75,7 @@
     "file": "Sohee.wav",
     "text": "안녕하세요, 제 채널에 오신 것을 환영합니다. 오늘은 일상 속의 새로운 발견을 함께 나누고 싶습니다.",
     "language": "Korean",
-    "origin": "Synthetic reference generated once with Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0). All subsequent synthesis uses IndexTTS 2.5.",
+    "origin": "Synthetic reference generated once with Qwen3-TTS-12Hz-1.7B-CustomVoice (Apache-2.0). Synthesis uses these fixed references with Breeze TTS 2.",
     "source_model": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
     "source_revision": "0c0e3051f131929182e2c023b9537f8b1c68adfe",
     "sha256": "9f7c96d8b2ec919f2821d700efa200daf0784b0eb69fff946e72a580724d7eba"
