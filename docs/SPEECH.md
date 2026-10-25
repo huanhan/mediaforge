@@ -28,9 +28,7 @@
   "speaker": "Serena",
   "language": "Chinese",
   "speed": 1.1,
-  "emotion_mode": "text",
-  "emotion_text": "自然、平静地讲述。",
-  "emotion_strength": 0.65,
+  "emotion_mode": "reference",
   "pause_ms": 200,
   "volume_db": 0,
   "seed": 42
@@ -41,10 +39,12 @@ POST `/v1/audio/speech` 返回 202 + id，GET `/v1/tasks/{id}` 查询并下载 W
 
 语速 0.5–2× 映射到模型 `duration_factor=1/speed`，不再使用 FFmpeg atempo。实际长度由模型生成，倍率不是精确时长保证。语言为 Chinese、English、Japanese、Spanish、Arabic、Auto。自动识别限制在上述五种语言，短文本建议明确选择。
 
-情绪模式：
+情绪模式（默认 `reference`，先保留参考录音的说话方式）：
 - `text`：`emotion_text` 使用本地 0.6B 情绪分析器映射到八维情绪。
 - `vector`：`emotion_vector` 为八个 0–1 数值，顺序是 happy、angry、sad、afraid、disgusted、melancholic、surprised、calm。`emotion_strength` 为总强度。
 - `reference`：可传 `emotion_reference_file_id`，借用独立音频的情绪；省略时沿用说话人样本，模型强制使用样本完整情绪。
+
+文字情绪是额外的情绪向量条件，并非无处理的克隆；即使“自然、平静”也可能改变音高和声线感受。需要角色表演时主动开启 `text` 或 `vector`，先试听再调整。Gradio 默认不勾选额外文字情绪。
 
 其他参数：`pause_ms` 0–2000（内部文本分段之间），`volume_db` -12–12，`temperature` .1–1.5，`top_p` .1–1，`top_k` 1–100，`repetition_penalty` 1–20，`max_segment_tokens` 40–200，`text_normalization` 布尔值。默认值见 OpenAPI；文本规范化的具体支持由上游各语言前端决定。
 

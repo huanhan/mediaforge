@@ -2571,7 +2571,7 @@
               "vector"
             ],
             "title": "Emotion Mode",
-            "default": "text"
+            "default": "reference"
           },
           "emotion_text": {
             "type": "string",

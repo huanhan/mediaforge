@@ -26,9 +26,21 @@ class Idle:
 @pytest.mark.parametrize("patch", [dict(text=" "),dict(text="a"*1001),dict(speed=float('inf')),
     dict(reference_file_id="../x.wav", reference_text="hello"), dict(emotion_vector=[0]*7),
     dict(reference_text="hello"),dict(emotion_vector=[float("nan")]*8),dict(speaker="unknown"),
-    dict(model="Qwen3-TTS-12Hz-1.7B"),dict(instruct="自然讲述"),dict(emotion_text=" ")])
+    dict(model="Qwen3-TTS-12Hz-1.7B"),dict(instruct="自然讲述"),dict(emotion_mode="text",emotion_text=" ")])
 def test_request_rejects_invalid_or_unimplemented_parameters(patch):
     with pytest.raises(ValidationError): SpeechRequest.model_validate({"text":"hello",**patch})
+
+
+def test_default_clone_uses_reference_delivery_without_text_emotion():
+    request = SpeechRequest(text="hello", reference_file_id="personal.wav")
+    options = inference_options({**request.model_dump(), "reference_audio": "personal.wav"})
+    assert request.emotion_mode == "reference"
+    assert not options["use_emo_text"] and options["emo_vector"] is None
+    assert options["emo_audio_prompt"] is None  # IndexTTS then uses the speaker sample itself.
+    assert options["spk_audio_prompt"] == "personal.wav"
+    explicit = inference_options({**request.model_dump(), "reference_audio": "personal.wav",
+                                  "emotion_mode": "text", "emotion_text": "angry"})
+    assert explicit["use_emo_text"] and explicit["emo_text"] == "angry"
 
 def test_native_duration_and_emotion_controls_with_cloned_voice():
     request = SpeechRequest(text="你好", reference_file_id="voice.wav", speed=1.25,

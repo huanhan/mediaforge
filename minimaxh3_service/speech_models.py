@@ -14,7 +14,7 @@ class SpeechRequest(BaseModel):
     reference_file_id: str | None = Field(default=None, min_length=1, max_length=512)
     reference_text: str | None = Field(default=None, min_length=1, max_length=1500)
     speed: float = Field(default=1, ge=0.5, le=2, allow_inf_nan=False)
-    emotion_mode: Literal["reference", "text", "vector"] = "text"
+    emotion_mode: Literal["reference", "text", "vector"] = "reference"
     emotion_text: str = Field(default="自然、平静地讲述。", max_length=500)
     emotion_strength: float = Field(default=0.65, ge=0, le=1, allow_inf_nan=False)
     emotion_vector: list[float] = Field(default_factory=lambda: [0, 0, 0, 0, 0, 0, 0, 0.5], min_length=8, max_length=8)

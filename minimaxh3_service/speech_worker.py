@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 def inference_options(request):
-    mode = request.get("emotion_mode", "text")
+    mode = request.get("emotion_mode", "reference")
     return dict(
         spk_audio_prompt=request["reference_audio"], text=request["text"],
         emo_audio_prompt=request.get("emotion_reference_audio") if mode == "reference" else None,
@@ -55,7 +55,7 @@ def main():
     model = IndexTTS2(cfg_path=str(Path(args.model_dir) / "config.yaml"), model_dir=args.model_dir,
                      device=args.device, use_bf16=args.device != "cpu", use_cuda_kernel=False,
                      use_deepspeed=False, use_accel=False, use_torch_compile=False,
-                     use_qwen_emo=request.get("emotion_mode", "text") == "text")
+                     use_qwen_emo=request.get("emotion_mode", "reference") == "text")
     progress(.20)
     languages = {"Chinese": "ZH", "English": "EN", "Japanese": "JA", "Spanish": "ES", "Arabic": "AR"}
     language = request["language"]

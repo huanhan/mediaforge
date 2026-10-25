@@ -6,10 +6,10 @@ from .speech_models import SPEAKERS
 def add_speech_ui(client):
     import gradio as gr
 
-    def submit(text, speaker, language, speed, emotion_text, strength, pause, volume, reference, reference_text):
+    def submit(text, speaker, language, speed, style_emotion, emotion_text, strength, pause, volume, reference, reference_text):
         try:
             result = client.submit_speech(dict(text=text, speaker=speaker, language=language, speed=speed,
-                emotion_mode="text", emotion_text=emotion_text, emotion_strength=strength, pause_ms=int(pause), volume_db=volume, **({"reference_text": reference_text} if reference and reference_text else {})), reference)
+                emotion_mode="text" if style_emotion else "reference", emotion_text=emotion_text, emotion_strength=strength, pause_ms=int(pause), volume_db=volume, **({"reference_text": reference_text} if reference and reference_text else {})), reference)
             return result["id"], f"已排队 · {result['id']}", None, {}, gr.Timer(active=True)
         except (ValueError, OSError, httpx.HTTPError) as exc:
             raise gr.Error(str(exc)) from exc
@@ -39,6 +39,7 @@ def add_speech_ui(client):
             speaker = gr.Dropdown(list(SPEAKERS), value="Serena", label="预置音色")
             language = gr.Dropdown(["Chinese", "English", "Auto", "Japanese", "Spanish", "Arabic"], value="Chinese", label="语言")
             speed = gr.Slider(.5, 2, value=1, step=.05, label="语速（模型原生控制）")
+            style_emotion = gr.Checkbox(value=False, label="使用额外文字情绪（默认沿用录音语气）")
             emotion_text = gr.Textbox(label="情绪描述（预置和录音音色均生效）", value="自然清晰，像与观众交谈一样讲解。")
             strength = gr.Slider(0, 1, value=.65, step=.05, label="情绪总强度")
             pause = gr.Slider(0, 2000, value=200, step=10, label="分段间停顿（毫秒）")
@@ -54,7 +55,7 @@ def add_speech_ui(client):
             update = gr.Button("刷新状态")
             stop = gr.Button("取消配音任务")
     task, cached, timer = gr.State(""), gr.State({}), gr.Timer(3, active=False)
-    start.click(submit, [text,speaker,language,speed,emotion_text,strength,pause,volume,reference,reference_text], [task,status,audio,cached,timer], concurrency_id="speech-task", concurrency_limit=1)
+    start.click(submit, [text,speaker,language,speed,style_emotion,emotion_text,strength,pause,volume,reference,reference_text], [task,status,audio,cached,timer], concurrency_id="speech-task", concurrency_limit=1)
     for event in (timer.tick,update.click):
         event(refresh,[task,cached],[status,audio,cached,timer],concurrency_id="speech-task",concurrency_limit=1)
     def cancel(task_id):
