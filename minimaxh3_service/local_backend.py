@@ -95,8 +95,12 @@ class LocalGenerationBackend:
     async def close(self) -> None:
         await self.tasks.close()
 
-    async def ready(self) -> dict:
-        readiness = dict(self.runner.readiness())
+    async def ready(self, *, capability: Literal["video"] | None = None) -> dict:
+        readiness = dict(await asyncio.to_thread(self.runner.readiness))
+        # Video submission must not wait for unrelated speech/music subprocess
+        # probes (which can take longer than the video's readiness timeout).
+        if capability == "video":
+            return readiness
         readiness["upscale"] = self.upscale_runner.readiness()
         readiness["removal"] = self.tasks.removal_runner.readiness()
         readiness["speech"] = await asyncio.to_thread(self.tasks.speech_runner.readiness)

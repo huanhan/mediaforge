@@ -105,6 +105,8 @@ Invoke-RestMethod http://127.0.0.1:8000/readyz | ConvertTo-Json -Depth 6
 
 就绪响应应包含 `"backend": "native"`、`"status": "ready"`、CUDA 设备信息和 `"upscale"` 子状态。服务在第一次对应任务时才加载大模型；视频和超分完成后默认各自空闲 5 秒释放模型，下次任务再重新加载。`"models_loaded"` 可用于查看权重是否当前驻留。
 
+视频生成客户端应调用 `/readyz?capability=video`，只检查 H3 的运行时、模型文件、CUDA 和编码器。默认 `/readyz` 保留完整能力目录，语音、音乐的冷启动探测可能需要数十秒；这些可选探测不应阻塞视频提交。视频依赖缺失时，专用检查仍返回 503。
+
 ## 文本生成视频
 
 ### Gradio 视频生成界面

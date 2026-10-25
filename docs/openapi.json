@@ -35,8 +35,27 @@
           "health"
         ],
         "summary": "Check local runtime readiness",
-        "description": "Reports installed runtimes, weights, CUDA state, and whether H3/SeedVR2 resources are currently resident. Returns 503 when required assets are missing.",
+        "description": "Reports installed runtimes, weights, CUDA state, and whether H3/SeedVR2 resources are currently resident. Use capability=video before video generation to check only H3 dependencies without waiting for optional speech/music probes. Returns 503 when required assets are missing.",
         "operationId": "readiness_check",
+        "parameters": [
+          {
+            "name": "capability",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "video",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Capability"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -54,6 +73,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReadinessStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }

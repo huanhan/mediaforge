@@ -245,7 +245,9 @@ def create_app(
         summary="Check local runtime readiness",
         description=(
             "Reports installed runtimes, weights, CUDA state, and whether H3/SeedVR2 "
-            "resources are currently resident. Returns 503 when required assets are missing."
+            "resources are currently resident. Use capability=video before video generation "
+            "to check only H3 dependencies without waiting for optional speech/music probes. "
+            "Returns 503 when required assets are missing."
         ),
         operation_id="readiness_check",
         responses={
@@ -255,8 +257,9 @@ def create_app(
             }
         },
     )
-    async def readyz(request: Request) -> JSONResponse:
-        readiness = await _backend(request).ready()
+    async def readyz(request: Request, capability: Literal["video"] | None = None) -> JSONResponse:
+        backend = _backend(request)
+        readiness = await backend.ready(capability=capability) if capability else await backend.ready()
         ready = readiness.get("status") == "ready"
         return JSONResponse(
             status_code=status.HTTP_200_OK if ready else status.HTTP_503_SERVICE_UNAVAILABLE,
