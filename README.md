@@ -218,6 +218,16 @@ Invoke-RestMethod `
 
 接口返回 HTTP `202`，包含任务 `id`、共享队列位置和目标宽高。后续继续使用 `GET /v1/tasks/{id}` 或 `/events` 查询；图片结果为 PNG，视频结果为 MP4。查询响应的 `kind` 为 `generation` 或 `upscale`。
 
+## 素材采集
+
+通过 `extensions/source-collector` 中的 Chrome 扩展，读取公开网页的正文和已加载评论，保存为 Markdown。接口见 [素材采集 API](docs/COLLECTION.md)：
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/v1/collections `
+  -ContentType application/json `
+  -Body '{"url": "https://example.com/articles/1"}'
+```
+
 ## 首尾帧和参考素材
 
 视频编辑和长视频重叠分段的接口、对齐规则及限制见 [分段生成说明](docs/SEGMENTED_GENERATION.md)。

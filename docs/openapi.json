@@ -1546,6 +1546,356 @@
           }
         }
       }
+    },
+    "/v1/collections": {
+      "post": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Queue a public web page for browser collection",
+        "description": "Queues one public http(s) page. The Chrome extension running in the operator's browser opens it in a new tab, reads its visible text and loaded comments, and writes source.md. Poll GET /v1/collections/{id}.",
+        "operationId": "create_collection",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmittedCollection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "List recent collection tasks",
+        "operationId": "list_collections",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/collections/{collection_id}": {
+      "get": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Get a collection task",
+        "operationId": "get_collection",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "collection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{16}$",
+              "title": "Collection Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested task or file does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/collections/{collection_id}/source": {
+      "get": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Download the collected Markdown source",
+        "operationId": "download_collection_source",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "collection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{16}$",
+              "title": "Collection Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested task or file does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/collections/{collection_id}/media/{filename}": {
+      "get": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Download a captured page response",
+        "operationId": "download_collection_media",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "collection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{16}$",
+              "title": "Collection Id"
+            }
+          },
+          {
+            "name": "filename",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{16}\\.(jpg|png|webp|gif|bin|mp4|webm|mov)$",
+              "title": "Filename"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "The supplied API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested task or file does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1639,6 +1989,155 @@
           "file"
         ],
         "title": "Body_upload_file"
+      },
+      "CollectionList": {
+        "properties": {
+          "collections": {
+            "items": {
+              "$ref": "#/components/schemas/CollectionStatus"
+            },
+            "type": "array",
+            "title": "Collections"
+          }
+        },
+        "type": "object",
+        "required": [
+          "collections"
+        ],
+        "title": "CollectionList"
+      },
+      "CollectionMedia": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "description": "Stored response file name under media/."
+          },
+          "bytes": {
+            "type": "integer",
+            "title": "Bytes",
+            "description": "Stored byte count."
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url",
+            "description": "Original resource URL observed by the browser."
+          },
+          "download_url": {
+            "type": "string",
+            "title": "Download Url",
+            "description": "Absolute URL for downloading the captured response."
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "bytes",
+          "source_url",
+          "download_url"
+        ],
+        "title": "CollectionMedia"
+      },
+      "CollectionRequest": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Url",
+            "description": "Public http(s) page to collect on standard ports. Localhost and private addresses are refused."
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Optional label shown in task status; defaults to the URL."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "CollectionRequest"
+      },
+      "CollectionStatus": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Collection task identifier."
+          },
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "Submitted public page URL."
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Label for the task."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "waiting_login",
+              "failed"
+            ],
+            "title": "Status",
+            "description": "queued: waiting for the browser; running: being read; completed: source written; waiting_login: the page needs the user to log in or pass verification in that browser, then submit the same URL again; failed: see error."
+          },
+          "error": {
+            "type": "string",
+            "title": "Error",
+            "description": "Reason for waiting_login or failed.",
+            "default": ""
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At",
+            "description": "Unix time when the task was accepted."
+          },
+          "source_download_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Download Url",
+            "description": "Markdown source with the page text and visible comments; present when completed."
+          },
+          "media": {
+            "items": {
+              "$ref": "#/components/schemas/CollectionMedia"
+            },
+            "type": "array",
+            "title": "Media",
+            "description": "Full responses captured from the page, when page resource capture is enabled in the extension."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "url",
+          "title",
+          "status",
+          "created_at"
+        ],
+        "title": "CollectionStatus"
       },
       "DepthRequest": {
         "properties": {
@@ -2664,6 +3163,32 @@
         ],
         "title": "SubmittedBeatAnalysisTask"
       },
+      "SubmittedCollection": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Collection task identifier used by /v1/collections/{id}."
+          },
+          "status": {
+            "type": "string",
+            "const": "queued",
+            "title": "Status",
+            "default": "queued"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "Submitted public page URL."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "url"
+        ],
+        "title": "SubmittedCollection"
+      },
       "SubmittedDepthTask": {
         "properties": {
           "id": {
@@ -3427,6 +3952,10 @@
     {
       "name": "removal",
       "description": "Separate foregrounds with SAM 2 and repair video backgrounds with ProPainter."
+    },
+    {
+      "name": "collections",
+      "description": "Collect public web page text and visible comments through the local browser extension."
     },
     {
       "name": "tasks",

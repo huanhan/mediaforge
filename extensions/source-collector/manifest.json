@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "素材采集助手 (MiniMax H3)",
+  "version": "2.0.0",
+  "description": "把你在浏览器里打开的公开网页正文和已加载评论交给本机的 MiniMax H3 采集服务。安装即用，无需配对。",
+  "permissions": ["storage", "tabs", "scripting", "alarms", "debugger"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "background": {"service_worker": "background.js", "type": "module"},
+  "action": {"default_popup": "popup.html", "default_title": "素材采集助手"}
+}

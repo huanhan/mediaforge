@@ -622,3 +622,40 @@ class ErrorResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     detail: str = Field(description="Human-readable HTTP error message.")
+
+
+class CollectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    url: str = Field(min_length=1, max_length=2000, description="Public http(s) page to collect on standard ports. Localhost and private addresses are refused.")
+    title: str | None = Field(default=None, max_length=300, description="Optional label shown in task status; defaults to the URL.")
+
+
+class SubmittedCollection(BaseModel):
+    id: str = Field(description="Collection task identifier used by /v1/collections/{id}.")
+    status: Literal["queued"] = "queued"
+    url: str = Field(description="Submitted public page URL.")
+
+
+class CollectionMedia(BaseModel):
+    filename: str = Field(description="Stored response file name under media/.")
+    bytes: int = Field(description="Stored byte count.")
+    source_url: str = Field(description="Original resource URL observed by the browser.")
+    download_url: str = Field(description="Absolute URL for downloading the captured response.")
+
+
+class CollectionStatus(BaseModel):
+    id: str = Field(description="Collection task identifier.")
+    url: str = Field(description="Submitted public page URL.")
+    title: str = Field(description="Label for the task.")
+    status: Literal["queued", "running", "completed", "waiting_login", "failed"] = Field(
+        description="queued: waiting for the browser; running: being read; completed: source written; waiting_login: the page needs the user to log in or pass verification in that browser, then submit the same URL again; failed: see error."
+    )
+    error: str = Field(default="", description="Reason for waiting_login or failed.")
+    created_at: float = Field(description="Unix time when the task was accepted.")
+    source_download_url: str | None = Field(default=None, description="Markdown source with the page text and visible comments; present when completed.")
+    media: list[CollectionMedia] = Field(default_factory=list, description="Full responses captured from the page, when page resource capture is enabled in the extension.")
+
+
+class CollectionList(BaseModel):
+    collections: list[CollectionStatus]

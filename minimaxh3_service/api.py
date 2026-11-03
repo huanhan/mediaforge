@@ -32,6 +32,22 @@ from . import __version__
 from .backend import BackendError, BackendTask, GenerationBackend
 from .config import Settings
 from .local_backend import LocalGenerationBackend
+from .source_collector import (
+    MEDIA_DIR,
+    SOURCE_FILE,
+    Bridge,
+    BridgeError,
+    check_task_target,
+    public_url,
+    register_extension_routes,
+)
+from .models import (
+    CollectionList,
+    CollectionMedia,
+    CollectionRequest,
+    CollectionStatus,
+    SubmittedCollection,
+)
 from .models import DepthRequest, SubmittedDepthTask, SkeletonRequest, SubmittedSkeletonTask
 from .models import BeatAnalysisRequest, SubmittedBeatAnalysisTask
 from .models import TranscriptionRequest, SubmittedTranscriptionTask, AlignmentRequest
@@ -75,6 +91,7 @@ OPENAPI_TAGS = [
     {"name": "generation", "description": "Submit MiniMax H3 video generation tasks."},
     {"name": "upscale", "description": "Submit SeedVR2 image or whole-video upscale tasks."},
     {"name": "removal", "description": "Separate foregrounds with SAM 2 and repair video backgrounds with ProPainter."},
+    {"name": "collections", "description": "Collect public web page text and visible comments through the local browser extension."},
     {"name": "tasks", "description": "Query, stream, or cancel tasks from the shared GPU queue."},
 ]
 API_KEY_AUTH = APIKeyHeader(
@@ -778,6 +795,96 @@ def create_app(
             media_type=media_type,
             headers={"Content-Disposition": f"inline; filename*=UTF-8''{quote(filename, safe='')}"},
         )
+
+    collector = Bridge(service_settings.data_root.expanduser().resolve() / "collections")
+    register_extension_routes(application, collector)
+
+    def _collection_response(request: Request, task: dict) -> CollectionStatus:
+        task_dir = collector.task_dir(task["id"])
+        source = task_dir / SOURCE_FILE
+        source_url = (
+            str(request.url_for("download_collection_source", collection_id=task["id"]))
+            if source.is_file() else None
+        )
+        media = [
+            CollectionMedia(
+                filename=item["file"],
+                bytes=item["bytes"],
+                source_url=item["url"],
+                download_url=str(request.url_for(
+                    "download_collection_media", collection_id=task["id"], filename=item["file"],
+                )),
+            )
+            for item in task["captured"]
+        ]
+        return CollectionStatus(
+            id=task["id"],
+            url=task["url"],
+            title=task["title"],
+            status=task["status"],
+            error=task["error"],
+            created_at=task["created_at"],
+            source_download_url=source_url,
+            media=media,
+        )
+
+    def _describe_collection(collection_id: str) -> dict:
+        try:
+            return collector.describe(collection_id)
+        except BridgeError as error:
+            raise HTTPException(status_code=error.status, detail=str(error))
+
+    @router.post("/collections", response_model=SubmittedCollection, status_code=202,
+                 tags=["collections"], summary="Queue a public web page for browser collection",
+                 operation_id="create_collection",
+                 description="Queues one public http(s) page. The Chrome extension running in the operator's browser opens it in a new tab, reads its visible text and loaded comments, and writes source.md. Poll GET /v1/collections/{id}.",
+                 responses={400: {"model": MessageResponse}, 429: {"model": MessageResponse}})
+    async def create_collection(request: Request, body: CollectionRequest) -> SubmittedCollection:
+        try:
+            # Reject private/local targets before queuing; the extension re-checks when it claims the task.
+            url = public_url(body.url)
+            await asyncio.to_thread(check_task_target, url)
+            task = collector.enqueue(url, body.title or "")
+        except BridgeError as error:
+            raise HTTPException(status_code=error.status, detail=str(error))
+        return SubmittedCollection(id=task.id, url=task.url)
+
+    @router.get("/collections", response_model=CollectionList, tags=["collections"],
+                summary="List recent collection tasks", operation_id="list_collections")
+    async def list_collections(request: Request, limit: int = Query(default=20, ge=1, le=100)) -> CollectionList:
+        return CollectionList(collections=[_collection_response(request, row) for row in collector.recent(limit)])
+
+    @router.get("/collections/{collection_id}", response_model=CollectionStatus, tags=["collections"],
+                summary="Get a collection task", operation_id="get_collection",
+                responses={404: NOT_FOUND_RESPONSE})
+    async def get_collection(request: Request, collection_id: str = PathParameter(pattern=r"^[0-9a-f]{16}$")) -> CollectionStatus:
+        return _collection_response(request, _describe_collection(collection_id))
+
+    @router.get("/collections/{collection_id}/source", tags=["collections"],
+                summary="Download the collected Markdown source", operation_id="download_collection_source",
+                response_class=FileResponse,
+                responses={404: NOT_FOUND_RESPONSE})
+    async def download_collection_source(collection_id: str = PathParameter(pattern=r"^[0-9a-f]{16}$")) -> FileResponse:
+        _describe_collection(collection_id)
+        path = collector.task_dir(collection_id) / SOURCE_FILE
+        if not path.is_file():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="source not available yet")
+        return FileResponse(path, media_type="text/markdown; charset=utf-8", filename=f"{collection_id}.md")
+
+    @router.get("/collections/{collection_id}/media/{filename}", tags=["collections"],
+                summary="Download a captured page response", operation_id="download_collection_media",
+                response_class=FileResponse,
+                responses={404: NOT_FOUND_RESPONSE})
+    async def download_collection_media(
+        collection_id: str = PathParameter(pattern=r"^[0-9a-f]{16}$"),
+        filename: str = PathParameter(pattern=r"^[0-9a-f]{16}\.(jpg|png|webp|gif|bin|mp4|webm|mov)$"),
+    ) -> FileResponse:
+        _describe_collection(collection_id)
+        path = collector.task_dir(collection_id) / MEDIA_DIR / filename
+        if not path.is_file():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="media not found")
+        media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        return FileResponse(path, media_type=media_type, filename=filename)
 
     application.include_router(router)
     # The optional UI shares this application's listener and backend lifecycle.
