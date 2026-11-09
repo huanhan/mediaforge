@@ -1,6 +1,6 @@
 ---
-name: newsnow
-description: 查询 NewsNow 聚合的热门新闻榜单（知乎、微博、抖音、B站、百度、华尔街见闻等）。当用户想看某个平台今天的热点、热榜、热搜、快讯，或问“知乎/微博现在什么热门”时使用。不支持小红书。与 MiniMax H3 本地服务无关。
+name: mf-newsnow
+description: 查询 NewsNow 聚合的热门新闻榜单（知乎、微博、抖音、B站、百度、华尔街见闻等）。当用户想看某个平台今天的热点、热榜、热搜、快讯，或问“知乎/微博现在什么热门”时使用。不支持小红书。与 mediaforge 本地服务无关。
 ---
 
 # NewsNow 热榜查询
@@ -9,14 +9,14 @@ description: 查询 NewsNow 聚合的热门新闻榜单（知乎、微博、抖�
 
 ## 使用方式
 
-脚本位于本仓库 `skills/newsnow/scripts/newsnow.js`，在项目根目录运行：
+脚本位于本仓库 `skills/mf-newsnow/scripts/newsnow.js`，在项目根目录运行：
 
 ```bash
-node skills/newsnow/scripts/newsnow.js -l                  # 列出常用源 ID
-node skills/newsnow/scripts/newsnow.js zhihu -n 10         # 知乎前 10 条
-node skills/newsnow/scripts/newsnow.js weibo -n 20         # 微博热搜前 20 条
-node skills/newsnow/scripts/newsnow.js weibo --json        # 原始 JSON（含完整链接等字段）
-node skills/newsnow/scripts/newsnow.js wallstreetcn-quick  # 子源用 "主ID-子ID"
+node skills/mf-newsnow/scripts/newsnow.js -l                  # 列出常用源 ID
+node skills/mf-newsnow/scripts/newsnow.js zhihu -n 10         # 知乎前 10 条
+node skills/mf-newsnow/scripts/newsnow.js weibo -n 20         # 微博热搜前 20 条
+node skills/mf-newsnow/scripts/newsnow.js weibo --json        # 原始 JSON（含完整链接等字段）
+node skills/mf-newsnow/scripts/newsnow.js wallstreetcn-quick  # 子源用 "主ID-子ID"
 ```
 
 选项：`-n/--limit`（默认 10，最多 30）、`-l/--list`、`--json`、`--latest`、`--base <地址>`（自建服务时使用）。

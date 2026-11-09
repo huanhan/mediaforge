@@ -1,9 +1,9 @@
 ---
-name: h3-music-generate
-description: 用 MiniMax H3 本地服务（http://127.0.0.1:8000）的 YuE2 生成音乐，支持纯音乐 BGM 和带歌词人声的歌曲，输出 48kHz 立体声 WAV、元数据 JSON 和可选 ABC 乐谱。完整流程为提交风格与歌词、轮询任务、下载结果。当用户要生成背景音乐、写歌、按歌词生成歌曲或做纯音乐时使用。
+name: mf-music-generate
+description: 用 mediaforge 本地服务（http://127.0.0.1:8000）的 YuE2 生成音乐，支持纯音乐 BGM 和带歌词人声的歌曲，输出 48kHz 立体声 WAV、元数据 JSON 和可选 ABC 乐谱。完整流程为提交风格与歌词、轮询任务、下载结果。当用户要生成背景音乐、写歌、按歌词生成歌曲或做纯音乐时使用。
 ---
 
-# H3 音乐生成（YuE2）
+# 音乐生成（YuE2）
 
 完整流程：**提交风格与歌词参数 → 轮询任务 → 下载 WAV 与元数据**。音乐生成不需要上传素材。
 
@@ -78,4 +78,4 @@ for o in json.load(sys.stdin)['outputs']: print(o['filename'], o['download_url']
 
 - 生成与其他任务共享 GPU 队列，排队较久属正常。
 - 取消运行中的任务需要服务端开启 `H3_ALLOW_INTERRUPT_RUNNING=true`。
-- 要配合视频卡点时，把音乐交给 `h3-beat-analysis` 找节拍。
+- 要配合视频卡点时，把音乐交给 `mf-beat-analysis` 找节拍。
