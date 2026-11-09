@@ -826,7 +826,7 @@ uv run --extra local --extra ui --extra dev python -m pytest tests/test_packagin
 
 ## Claude Code Skill 使用教程
 
-仓库的 `skills/` 目录提供 11 个 Claude Code Skill，让 Claude 直接通过本地 API 调用上面的功能。每个 Skill 写明了完整流程（检查就绪 → 上传素材 → 提交 → 轮询 → 下载）、参数规则和常见错误处理。
+仓库的 `skills/` 目录提供 12 个 Claude Code Skill。其中 11 个 `h3-*` Skill 让 Claude 直接通过本地 API 调用上面的功能，每个都写明了完整流程（检查就绪 → 上传素材 → 提交 → 轮询 → 下载）、参数规则和常见错误处理；`newsnow` 不依赖本地服务，用于查询各平台热榜。
 
 ### 1. 安装
 
@@ -861,6 +861,7 @@ Copy-Item -Recurse -Force skills/h3-* .claude/skills/
 | `h3-remove-object` | 抠出或移除视频中的人物/物体（最多 8 个），支持绿幕和透明输出 | SAM 2、ProPainter |
 | `h3-speech` | Breeze TTS 2 配音，支持预设音色、参考音频克隆、表演指令 | Breeze 环境与权重（仅非商业用途） |
 | `h3-web-collect` | 通过 Chrome 扩展采集公开网页正文、评论为 Markdown | 扩展已开启 |
+| `newsnow` | 查询知乎、微博、B 站等平台热榜（不依赖本地服务，需要 Node.js 18+） | 外网访问 NewsNow 接口 |
 
 ### 4. 怎么用
 
@@ -877,6 +878,7 @@ Copy-Item -Recurse -Force skills/h3-* .claude/skills/
 - 「抠出视频里的狗，输出透明 WebM」→ `h3-remove-object`
 - 「用 `ref.wav` 的声音念这段旁白」→ `h3-speech`
 - 「把这个网页的正文保存成 Markdown」→ `h3-web-collect`
+- 「看看知乎和微博今天的热搜」→ `newsnow`
 
 也可以直接用斜杠命令调用，例如 `/h3-generate-video`，再补充参数。
 
@@ -888,7 +890,7 @@ Skill 通常会先询问缺少的信息，例如输入文件路径、时长、�
 - **采样参数**：Turbo 默认开启，会覆盖步数、采样器和调度器，即使在提示词中要求也不会生效。
 - **素材**：所有素材先通过 `POST /v1/files` 上传，使用返回的 `file_id`，不能直接传本地路径或外部 URL。
 - **许可**：Breeze 语音、YuE2 音乐的模型仅限非商业用途（见[许可](#许可)）。`h3-speech` 会提示许可限制；`h3-music-generate` 目前不提示，商用前请自行确认 YuE2 的授权条款。
-- **不包含的 Skill**：`skills/` 只包含与本项目接口对应的 Skill，不含 `image-gen`、`motion-showreel`、`newsnow` 等与本项目无关的 Skill。
+- **不包含的 Skill**：`skills/` 只包含与本项目相关的 Skill，不含 `image-gen`、`motion-showreel` 等与本项目无关的 Skill。
 
 ## 故障排查
 
