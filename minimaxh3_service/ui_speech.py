@@ -36,7 +36,7 @@ def add_speech_ui(client):
         except (ValueError, OSError, httpx.HTTPError) as exc:
             return f"查询失败，可刷新重试：{exc}", gr.skip(), gr.skip(), gr.Timer(active=False)
 
-    gr.Markdown("### 本地 Breeze TTS 2 · 非商业使用\n模型与本地生成结果仅限研究及非商业使用，详见 docs/licenses/BREEZE_MODEL_LICENSE.txt。每次生成一个镜头的口播。支持预置音色和自己的录音；生成 WAV，可下载后用于视频。人物口型同步需另行制作。")
+    gr.Markdown("### 本地 Breeze TTS 2 · 非商业使用\n模型与本地生成结果仅限研究及非商业使用，详见 licenses/BREEZE_MODEL_LICENSE.txt。每次生成一个镜头的口播。支持预置音色和自己的录音；生成 WAV，可下载后用于视频。人物口型同步需另行制作。")
     with gr.Row():
         with gr.Column():
             text = gr.Textbox(label="要说的话", lines=4, max_length=1000, value="[笑] 你好，欢迎来到我的频道。")

@@ -13,8 +13,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("docs/openapi.json"),
-        help="destination JSON path (default: docs/openapi.json)",
+        default=Path("openapi.json"),
+        help="destination JSON path (default: openapi.json)",
     )
     parser.add_argument(
         "--check",

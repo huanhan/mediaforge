@@ -100,7 +100,7 @@ def main(argv=None):
     manifest = json.loads(Path(__file__).with_name("pose_models.json").read_text(encoding="utf-8"))
     for entry in manifest:
         download(entry, args.models.expanduser())
-    print("Installed local DWPose. See docs/SKELETON.md for usage.")
+    print("Installed local DWPose. See README.md (骨骼提取) for usage.")
     return 0
 
 

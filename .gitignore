@@ -8,6 +8,13 @@ models/
 data/
 result.mp4
 matrix-results/
+/outputs/
+/weights/
+/.codex/
+/.review/
+/qianyi.json
+/*.mp4
+/*.png
 __pycache__/
 *.py[cod]
 dist/

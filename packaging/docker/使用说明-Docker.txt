@@ -71,4 +71,4 @@ H3_DATA_PATH=D:/AI/h3-data
 容器日志显示内部 8000 端口，访问时以宿主映射端口为准。
 设置 H3_API_KEY 后，界面登录用户名为 h3，密码为该 Key。
 
-更多模型和部署说明见同目录 MODELS.md 和 DISTRIBUTION.md。
+更多模型、配置和部署说明见同目录 README.md。

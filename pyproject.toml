@@ -3,6 +3,8 @@ name = "minimaxh3"
 version = "0.1.0"
 description = "A standalone local MiniMax H3 CUDA video generation API"
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.116,<1",

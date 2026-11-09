@@ -39,9 +39,9 @@ def build(output: Path, skip_build: bool) -> None:
         "archive_sha256": digest,
     }, indent=2) + "\n", encoding="utf-8")
     shutil.copy2(ROOT / "compose.yaml", output / "compose.yaml")
-    for filename in ("DISTRIBUTION.md", "MODELS.md", "THIRD_PARTY_NOTICES.md"):
-        shutil.copy2(ROOT / "docs" / filename, output / filename)
-    instructions = (ROOT / "docs" / "使用说明-Docker.txt").read_text(encoding="utf-8-sig")
+    shutil.copy2(ROOT / "README.md", output / "README.md")
+    shutil.copy2(ROOT / "packaging" / "THIRD_PARTY_NOTICES.md", output / "THIRD_PARTY_NOTICES.md")
+    instructions = (ROOT / "packaging" / "docker" / "使用说明-Docker.txt").read_text(encoding="utf-8-sig")
     (output / "使用说明-Docker.txt").write_text(
         instructions.replace("{version}", version), encoding="utf-8-sig",
     )

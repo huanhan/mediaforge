@@ -24,7 +24,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir uv==0.11.26
 WORKDIR /app
-COPY pyproject.toml uv.lock README.md ./
+COPY pyproject.toml uv.lock README.md LICENSE ./
 COPY minimaxh3_service ./minimaxh3_service
 RUN uv sync --locked --extra local --extra ui --no-dev --no-editable --no-cache
 COPY scripts/package_runtime.py ./scripts/package_runtime.py

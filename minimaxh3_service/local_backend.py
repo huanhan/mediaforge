@@ -198,7 +198,7 @@ class LocalGenerationBackend:
         if not readiness.get("foreground_available") or (
             request.output_mode != "foreground" and not readiness.get("background_available")
         ):
-            raise BackendError("人物分离 / 背景修复模型或依赖未安装，参见 docs/VIDEO_REMOVAL.md",
+            raise BackendError("人物分离 / 背景修复模型或依赖未安装，参见 README.md 的「人物移除」一节",
                                status_code=503, code="removal_not_ready", detail=readiness)
         source = self.assets.resolve_input(request.file_id)
         if source.suffix.lower() not in VIDEO_EXTENSIONS:
@@ -212,7 +212,7 @@ class LocalGenerationBackend:
                 raise BackendError("Voice reference must be uploaded audio", status_code=422, code="invalid_audio")
         readiness = await asyncio.to_thread(self.tasks.speech_runner.readiness)
         if readiness.get("status") != "ready":
-            raise BackendError("Breeze TTS 2 is not ready; see docs/SPEECH.md and setup_tts --accept-non-commercial-license",
+            raise BackendError("Breeze TTS 2 is not ready; see README.md (本地配音) and setup_tts --accept-non-commercial-license",
                                status_code=503, code="speech_not_ready", detail=readiness)
         return await self.tasks.submit_speech(request)
 
@@ -222,7 +222,7 @@ class LocalGenerationBackend:
             validate(request)
         readiness = await asyncio.to_thread(self.tasks.music_runner.readiness)
         if readiness.get("status") != "ready":
-            raise BackendError("音乐模型未就绪，请检查模型安装与配置，参见 docs/MUSIC.md",
+            raise BackendError("音乐模型未就绪，请检查模型安装与配置，参见 README.md 的「音乐生成」一节",
                                status_code=503, code="music_not_ready", detail=readiness)
         return await self.tasks.submit_music(request)
 
@@ -232,7 +232,7 @@ class LocalGenerationBackend:
             raise BackendError("depth requires an uploaded video", status_code=415, code="invalid_video")
         readiness = self.tasks.depth_runner.readiness()
         if readiness.get("status") != "ready":
-            raise BackendError("Video Depth Anything is not installed; see docs/DEPTH.md",
+            raise BackendError("Video Depth Anything is not installed; see README.md (视频深度)",
                                status_code=503, code="depth_not_ready", detail=readiness)
         return await self.tasks.submit_depth(request)
 
@@ -251,7 +251,7 @@ class LocalGenerationBackend:
             raise BackendError("beat analysis requires uploaded audio", status_code=415, code="invalid_audio")
         readiness = self.tasks.beat_runner.readiness()
         if readiness.get("status") != "ready":
-            raise BackendError("Beat analysis is not installed; see docs/BEAT_ANALYSIS.md",
+            raise BackendError("Beat analysis is not installed; see README.md (节奏分析)",
                                status_code=503, code="beat_analysis_not_ready", detail=readiness)
         return await self.tasks.submit_beat_analysis(request)
 
@@ -261,7 +261,7 @@ class LocalGenerationBackend:
             raise BackendError("transcription requires uploaded audio", status_code=415, code="invalid_audio")
         readiness = self.tasks.transcription_runner.readiness()
         if readiness.get("status") != "ready":
-            raise BackendError("Qwen3-ASR is not installed; see docs/TRANSCRIPTION.md",
+            raise BackendError("Qwen3-ASR is not installed; see README.md (歌词识别)",
                                status_code=503, code="transcription_not_ready", detail=readiness)
         return await self.tasks.submit_transcription(request)
 

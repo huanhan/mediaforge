@@ -88,14 +88,13 @@ def build(output: Path, runtime_source: Path | None, vc_runtime: Path) -> Path:
     package_runtimes(package / "runtime", runtime_source)
     for filename in ("start.cmd", "check.cmd", "launch.py", ".env.example"):
         shutil.copy2(ROOT / "packaging" / "windows" / filename, package / filename)
-    for filename in ("DISTRIBUTION.md", "MODELS.md", "THIRD_PARTY_NOTICES.md"):
-        shutil.copy2(ROOT / "docs" / filename, package / filename)
-    shutil.copytree(ROOT / "docs" / "licenses", package / "docs" / "licenses")
-    shutil.copy2(ROOT / "docs" / "SPEECH.md", package / "docs" / "SPEECH.md")
-    instructions = (ROOT / "docs" / "使用说明-Windows.txt").read_text(encoding="utf-8-sig")
+    shutil.copy2(ROOT / "README.md", package / "README.md")
+    shutil.copy2(ROOT / "packaging" / "THIRD_PARTY_NOTICES.md", package / "THIRD_PARTY_NOTICES.md")
+    shutil.copytree(ROOT / "licenses", package / "licenses")
+    instructions = (ROOT / "packaging" / "windows" / "使用说明-Windows.txt").read_text(encoding="utf-8-sig")
     for destination in (package, output):
         (destination / "使用说明-Windows.txt").write_text(instructions, encoding="utf-8-sig")
-    shutil.copy2(ROOT / "docs" / "openapi.json", package / "openapi.json")
+    shutil.copy2(ROOT / "openapi.json", package / "openapi.json")
     for relative in ("models/diffusion_models", "models/text_encoders", "models/vae", "models/loras", "models/SEEDVR2", "data/input", "data/output"):
         (package / relative).mkdir(parents=True)
     manifest = {

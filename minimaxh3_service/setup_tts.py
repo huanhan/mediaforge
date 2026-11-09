@@ -95,7 +95,7 @@ def main(argv=None):
                         help="Accept the pinned BreezeBlue Research and Non-Commercial License; no commercial rights")
     args = parser.parse_args(argv)
     if not args.accept_non_commercial_license:
-        parser.error("Read docs/licenses/BREEZE_MODEL_LICENSE.txt, then pass --accept-non-commercial-license for non-commercial use")
+        parser.error("Read licenses/BREEZE_MODEL_LICENSE.txt, then pass --accept-non-commercial-license for non-commercial use")
     if args.models_only:
         download_models(args.model_dir)
         return
