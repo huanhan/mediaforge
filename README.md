@@ -38,6 +38,7 @@ API 和 Gradio 界面共用一个端口（默认 `8000`）：
 - [本地配音](#本地配音)
 - [素材采集](#素材采集)
 - [OpenAPI 与对接](#openapi-与对接)
+- [Claude Code Skill 使用教程](#claude-code-skill-使用教程)
 - [配置](#配置)
 - [Docker](#docker)
 - [测试](#测试)
@@ -822,6 +823,72 @@ Docker 构建上下文采用允许清单（`.dockerignore`），只有应用源�
 ```powershell
 uv run --extra local --extra ui --extra dev python -m pytest tests/test_packaging.py tests/test_ui.py tests/test_api.py
 ```
+
+## Claude Code Skill 使用教程
+
+仓库的 `skills/` 目录提供 11 个 Claude Code Skill，让 Claude 直接通过本地 API 调用上面的功能。每个 Skill 写明了完整流程（检查就绪 → 上传素材 → 提交 → 轮询 → 下载）、参数规则和常见错误处理。
+
+### 1. 安装
+
+Claude Code 只会自动读取 `~/.claude/skills/` 或项目内 `.claude/skills/` 下的 Skill。把 `skills/` 中的目录复制到其中一处即可。以下以项目级安装为例（在项目根目录执行）：
+
+```powershell
+New-Item -ItemType Directory -Force .claude/skills | Out-Null
+Copy-Item -Recurse -Force skills/h3-* .claude/skills/
+```
+
+想在所有项目中使用，则复制到 `~/.claude/skills/`。复制后重新启动 Claude Code，输入 `/` 即可看到 `h3-*` 列表。
+
+### 2. 前提
+
+- 本地服务已启动：`uv run minimaxh3`（或 Windows 包的 `start.cmd`），并确认 `http://127.0.0.1:8000/readyz` 可访问。
+- Skill 使用 `curl` 调用，Windows 用户请使用 Git Bash 或 WSL 中的 `curl`，或让 Claude 使用 `curl.exe`。
+- 若设置了 `H3_API_KEY`，在启动 Claude Code 的环境中同时设置同一个 `H3_API_KEY`，Skill 会自动加上 `X-API-Key` 请求头。
+- Skill 只负责调用，不会替你下载模型。缺模型时 Skill 会读取 `/readyz` 的 `missing_models` 并告诉你缺什么。
+
+### 3. Skill 一览
+
+| Skill | 用途 | 需要的功能 |
+|---|---|---|
+| `h3-generate-video` | 文生视频、首尾帧过渡、参考图/视频/音频生成视频，支持超过 15 秒的分段长视频 | 基础 H3 权重；`ref2v` 需 Ref2V 权重 |
+| `h3-edit-video` | 换背景、换角色、动作迁移、按提示词改写已有视频，可指定时间区间 | Ref2V 权重 |
+| `h3-upscale` | 图片或视频超分到指定宽高 | SeedVR2 |
+| `h3-lyrics` | 歌词转写、人工校对后逐行对齐，输出字幕与逐字时间戳 | ASR 与 ForcedAligner |
+| `h3-beat-analysis` | 分析音乐拍点、小节第一拍、能量，用于卡点剪辑 | `beat` 扩展 |
+| `h3-depth` | 视频转相对逆深度图（灰度 MP4，可选 NPZ） | `depth` 扩展 |
+| `h3-pose` | DWPose 提取骨架视频 | `pose` 扩展 |
+| `h3-music-generate` | YuE2 生成纯音乐或带歌词的歌曲 | YuE2 环境与权重 |
+| `h3-remove-object` | 抠出或移除视频中的人物/物体（最多 8 个），支持绿幕和透明输出 | SAM 2、ProPainter |
+| `h3-speech` | Breeze TTS 2 配音，支持预设音色、参考音频克隆、表演指令 | Breeze 环境与权重（仅非商业用途） |
+| `h3-web-collect` | 通过 Chrome 扩展采集公开网页正文、评论为 Markdown | 扩展已开启 |
+
+### 4. 怎么用
+
+直接用自然语言描述需求，Claude 会根据 Skill 的 `description` 自动选择。例如：
+
+- 「用 H3 生成一段 4 秒的雨夜街道视频，竖屏 480p」→ `h3-generate-video`
+- 「把 `clip.mp4` 的背景换成 `bg.png`，保留人物动作」→ `h3-edit-video`
+- 「把这张图放大到 2336×3520」→ `h3-upscale`
+- 「给 `song.m4a` 转写歌词，我校对后再对齐」→ `h3-lyrics`
+- 「分析 `bgm.wav` 的节拍，我要按小节切镜」→ `h3-beat-analysis`
+- 「把 `dance.mp4` 转成深度图」→ `h3-depth`
+- 「提取 `dance.mp4` 的骨架视频」→ `h3-pose`
+- 「生成一首 30 秒的中文钢琴流行曲，歌词如下……」→ `h3-music-generate`
+- 「抠出视频里的狗，输出透明 WebM」→ `h3-remove-object`
+- 「用 `ref.wav` 的声音念这段旁白」→ `h3-speech`
+- 「把这个网页的正文保存成 Markdown」→ `h3-web-collect`
+
+也可以直接用斜杠命令调用，例如 `/h3-generate-video`，再补充参数。
+
+Skill 通常会先询问缺少的信息，例如输入文件路径、时长、输出目录。对于耗时任务（视频、音乐、超分），Skill 会轮询状态并在完成后给出下载结果；长任务中可以随时说「取消任务」。
+
+### 5. 使用须知
+
+- **视频生成**：超过 15 秒必须开启分段；`fl2v` 至少提供首帧或尾帧；`ref2v` 的参考素材要先上传。
+- **采样参数**：Turbo 默认开启，会覆盖步数、采样器和调度器，即使在提示词中要求也不会生效。
+- **素材**：所有素材先通过 `POST /v1/files` 上传，使用返回的 `file_id`，不能直接传本地路径或外部 URL。
+- **许可**：Breeze 语音、YuE2 音乐的模型仅限非商业用途（见[许可](#许可)）。`h3-speech` 会提示许可限制；`h3-music-generate` 目前不提示，商用前请自行确认 YuE2 的授权条款。
+- **不包含的 Skill**：`skills/` 只包含与本项目接口对应的 Skill，不含 `image-gen`、`motion-showreel`、`newsnow` 等与本项目无关的 Skill。
 
 ## 故障排查
 
