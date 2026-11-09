@@ -5,11 +5,11 @@ import pytest
 from pydantic import ValidationError
 from starlette.testclient import TestClient
 
-from minimaxh3_service.api import create_app
-from minimaxh3_service.backend import BackendError, OutputArtifact
-from minimaxh3_service.config import Settings
-from minimaxh3_service.local_backend import LocalGenerationBackend
-from minimaxh3_service.models import AlignmentRequest
+from mediaforge_service.api import create_app
+from mediaforge_service.backend import BackendError, OutputArtifact
+from mediaforge_service.config import Settings
+from mediaforge_service.local_backend import LocalGenerationBackend
+from mediaforge_service.models import AlignmentRequest
 
 
 class Runner:
@@ -52,7 +52,7 @@ def test_alignment_api_auth_queue_and_original_lyrics(tmp_path):
 
 def test_alignment_groups_word_times_without_changing_line_text():
     pytest.importorskip("numpy")
-    from minimaxh3_service.alignment_worker import make_cues
+    from mediaforge_service.alignment_worker import make_cues
     words = [{"text": "风", "start_time": 2, "end_time": 2.2},
              {"text": "来", "start_time": 2.2, "end_time": 3},
              {"text": "了", "start_time": 4, "end_time": 5}]
@@ -77,7 +77,7 @@ def test_alignment_rejects_invalid_requests(body):
 
 def test_long_alignment_preserves_edits_repeats_and_absolute_times():
     np = pytest.importorskip("numpy")
-    from minimaxh3_service.alignment_worker import alignment_windows, align_windows, make_cues
+    from mediaforge_service.alignment_worker import alignment_windows, align_windows, make_cues
     # A line crosses the ASR boundary, whose imperfect spelling must not replace it.
     lines = ["intro words here", "repeat the chorus", "new corrected words", "repeat the chorus", "final words here"]
     tokens = [word for line in lines for word in line.split()]
@@ -113,7 +113,7 @@ def test_long_alignment_preserves_edits_repeats_and_absolute_times():
 
 def test_long_alignment_keeps_long_instrumental_intro_and_outro():
     pytest.importorskip("numpy")
-    from minimaxh3_service.alignment_worker import alignment_windows
+    from mediaforge_service.alignment_worker import alignment_windows
     chunks = [{"start": i*120, "end": (i+1)*120, "text": "we sing these words" if i == 8 else "", "token_limit_reached": False}
               for i in range(12)]
     windows = alignment_windows("we sing these words".split(), chunks, str.split, 1440)
@@ -122,7 +122,7 @@ def test_long_alignment_keeps_long_instrumental_intro_and_outro():
 
 def test_long_alignment_rejects_unreliable_sections_and_invalid_local_times():
     np = pytest.importorskip("numpy")
-    from minimaxh3_service.alignment_worker import alignment_windows, align_windows
+    from mediaforge_service.alignment_worker import alignment_windows, align_windows
     chunk = {"start": 0, "end": 120, "text": "entirely unrelated text", "token_limit_reached": False}
     with pytest.raises(ValueError, match="Cannot locate"):
         alignment_windows(["confirmed", "lyrics"], [chunk], str.split, 120)

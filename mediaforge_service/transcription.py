@@ -30,7 +30,7 @@ class TranscriptionRunner:
         return self.settings.asr_max_seconds
 
     def worker_arguments(self, request, pcm, partial, extra):
-        return [sys.executable, "-m", "minimaxh3_service.transcription_worker", "--pcm", str(pcm),
+        return [sys.executable, "-m", "mediaforge_service.transcription_worker", "--pcm", str(pcm),
                 "--output", str(partial), "--model", str(self.settings.asr_model_path.expanduser().resolve()),
                 "--device", self.settings.asr_device, "--threads", str(self.settings.asr_cpu_threads),
                 "--file-id", request.file_id, "--title", request.title, "--language", request.language,

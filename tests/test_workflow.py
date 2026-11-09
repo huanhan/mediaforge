@@ -3,9 +3,9 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from minimaxh3_service.config import Settings
-from minimaxh3_service.models import GenerationRequest, ReferenceVideo
-from minimaxh3_service.workflow import build_plan, frame_count_for_duration
+from mediaforge_service.config import Settings
+from mediaforge_service.models import GenerationRequest, ReferenceVideo
+from mediaforge_service.workflow import build_plan, frame_count_for_duration
 
 
 def test_frame_count_uses_h3_grid() -> None:

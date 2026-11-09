@@ -1,6 +1,6 @@
 import pytest
 
-from minimaxh3_service.models import GenerationRequest, VideoEditRequest
+from mediaforge_service.models import GenerationRequest, VideoEditRequest
 
 
 @pytest.mark.parametrize("resolution,expected", [

@@ -50,7 +50,7 @@ def install_source(folder):
 
 def download_models(root):
     from filelock import FileLock
-    from minimaxh3_service.setup_music import download_weights
+    from mediaforge_service.setup_music import download_weights
     folder = model_folder(root).resolve()
     folder.mkdir(parents=True, exist_ok=True)
     endpoint = os.environ.get("HF_ENDPOINT", "https://huggingface.co").rstrip("/")

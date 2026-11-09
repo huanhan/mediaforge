@@ -7,14 +7,14 @@ from pathlib import Path
 import httpx
 import pytest
 
-from minimaxh3_service.backend import OutputArtifact
-from minimaxh3_service.models import GenerationRequest, RemovalRequest
-from minimaxh3_service.removal import repair_windows, run_command
-from minimaxh3_service.tasks import GenerationCanceled, LocalTaskManager
-from minimaxh3_service.ui import VideoClient, build_ui
-from minimaxh3_service.ui_removal import selection_click
-from minimaxh3_service.ui_removal import add_target
-from minimaxh3_service.video_remove import exclusive_masks
+from mediaforge_service.backend import OutputArtifact
+from mediaforge_service.models import GenerationRequest, RemovalRequest
+from mediaforge_service.removal import repair_windows, run_command
+from mediaforge_service.tasks import GenerationCanceled, LocalTaskManager
+from mediaforge_service.ui import VideoClient, build_ui
+from mediaforge_service.ui_removal import selection_click
+from mediaforge_service.ui_removal import add_target
+from mediaforge_service.video_remove import exclusive_masks
 
 
 @pytest.mark.parametrize("box", [[0, 0, 0, 1], [0, 1, 1, 0], [-.1, 0, 1, 1], [0, 0, float("nan"), 1]])
@@ -59,7 +59,7 @@ def test_foreground_export_uses_color_or_real_alpha(tmp_path, mode, color):
     av = pytest.importorskip("av")
     np = pytest.importorskip("numpy")
     Image = pytest.importorskip("PIL.Image")
-    from minimaxh3_service.removal import VideoRemovalRunner
+    from mediaforge_service.removal import VideoRemovalRunner
     source = tmp_path / "source.mp4"
     with av.open(str(source), "w") as container:
         stream = container.add_stream("libx264", rate=24)
@@ -101,8 +101,8 @@ def test_one_tracking_state_exports_all_masks_and_blank_prefix(monkeypatch, tmp_
     torch = pytest.importorskip("torch")
     np = pytest.importorskip("numpy")
     Image = pytest.importorskip("PIL.Image")
-    from minimaxh3_service.models import RemovalObject
-    from minimaxh3_service.video_remove import segment_objects
+    from mediaforge_service.models import RemovalObject
+    from mediaforge_service.video_remove import segment_objects
     calls = []
 
     class Predictor:
@@ -262,10 +262,10 @@ def test_ui_submits_multiple_objects_and_preserves_preview_choice():
 
 def test_removal_api_auth_validation_and_task_kind(tmp_path):
     from starlette.testclient import TestClient
-    from minimaxh3_service.api import create_app
-    from minimaxh3_service.backend import BackendTask
-    from minimaxh3_service.config import Settings
-    from minimaxh3_service.models import SubmittedRemovalTask
+    from mediaforge_service.api import create_app
+    from mediaforge_service.backend import BackendTask
+    from mediaforge_service.config import Settings
+    from mediaforge_service.models import SubmittedRemovalTask
 
     class Backend:
         async def start(self): pass

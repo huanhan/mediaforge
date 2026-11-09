@@ -11,13 +11,13 @@ import pytest
 from pydantic import ValidationError
 from starlette.testclient import TestClient
 
-from minimaxh3_service.api import create_app
-from minimaxh3_service.backend import BackendError, OutputArtifact
-from minimaxh3_service.beat import BeatAnalysisRunner
-from minimaxh3_service.config import Settings
-from minimaxh3_service.local_backend import LocalGenerationBackend
-from minimaxh3_service.models import BeatAnalysisRequest
-from minimaxh3_service.tasks import GenerationCanceled
+from mediaforge_service.api import create_app
+from mediaforge_service.backend import BackendError, OutputArtifact
+from mediaforge_service.beat import BeatAnalysisRunner
+from mediaforge_service.config import Settings
+from mediaforge_service.local_backend import LocalGenerationBackend
+from mediaforge_service.models import BeatAnalysisRequest
+from mediaforge_service.tasks import GenerationCanceled
 
 
 class IdleRunner:
@@ -114,7 +114,7 @@ def test_runner_cancels_and_times_out_subprocesses(tmp_path):
 def test_timing_preserves_leading_silence_and_reports_variable_intervals():
     np = pytest.importorskip("numpy")
     pytest.importorskip("scipy")
-    from minimaxh3_service.beat_worker import summarize
+    from mediaforge_service.beat_worker import summarize
     signal = np.zeros(22050*4, dtype=np.float32)
     signal[22050:22050+220] = .5
     result = summarize(signal, [1, 1.5, 2, 2.75, float("nan")], [1])

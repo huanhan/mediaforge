@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 torch = pytest.importorskip("torch")
-from minimaxh3_service.music_memory import bounded_sdpa, yue2_memory_scope
+from mediaforge_service.music_memory import bounded_sdpa, yue2_memory_scope
 
 
 def test_single_token_decode_keeps_native_dispatch(monkeypatch):

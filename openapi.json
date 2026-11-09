@@ -3688,7 +3688,7 @@
         "title": "UpscaleRequest",
         "examples": [
           {
-            "file_id": "minimaxh3/20260822/source.mp4",
+            "file_id": "mediaforge/20260822/source.mp4",
             "filename_prefix": "upscale/result",
             "height": 768,
             "seed": 42,

@@ -4,9 +4,9 @@ from unittest.mock import Mock
 import pytest
 from starlette.testclient import TestClient
 
-from minimaxh3_service.api import create_app
-from minimaxh3_service.config import Settings
-from minimaxh3_service.local_backend import LocalGenerationBackend
+from mediaforge_service.api import create_app
+from mediaforge_service.config import Settings
+from mediaforge_service.local_backend import LocalGenerationBackend
 
 
 @pytest.mark.parametrize("video_status,expected_code", [("ready", 200), ("not_ready", 503)])

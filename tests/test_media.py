@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from minimaxh3_service.media import load_image, load_video, load_video_frames, save_mp4
+from mediaforge_service.media import load_image, load_video, load_video_frames, save_mp4
 
 
 def test_save_mp4_muxes_video_and_stereo_audio(tmp_path: Path) -> None:

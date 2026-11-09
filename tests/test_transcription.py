@@ -10,13 +10,13 @@ import pytest
 from pydantic import ValidationError
 from starlette.testclient import TestClient
 
-from minimaxh3_service.api import create_app
-from minimaxh3_service.backend import BackendError, OutputArtifact
-from minimaxh3_service.config import Settings
-from minimaxh3_service.local_backend import LocalGenerationBackend
-from minimaxh3_service.models import BeatAnalysisRequest, TranscriptionRequest
-from minimaxh3_service.tasks import GenerationCanceled
-from minimaxh3_service.transcription import TranscriptionRunner
+from mediaforge_service.api import create_app
+from mediaforge_service.backend import BackendError, OutputArtifact
+from mediaforge_service.config import Settings
+from mediaforge_service.local_backend import LocalGenerationBackend
+from mediaforge_service.models import BeatAnalysisRequest, TranscriptionRequest
+from mediaforge_service.tasks import GenerationCanceled
+from mediaforge_service.transcription import TranscriptionRunner
 
 
 class IdleRunner:
@@ -159,7 +159,7 @@ def test_runner_cancels_and_times_out_subprocesses(tmp_path):
 
 def test_chunking_keeps_silence_and_all_samples_without_claiming_word_timing():
     np = pytest.importorskip("numpy")
-    from minimaxh3_service.transcription_worker import assemble_result
+    from mediaforge_service.transcription_worker import assemble_result
     signal = np.zeros(16000*61+17, dtype=np.float32)
     signal[16000*30:] = .2
     observed_lengths = []

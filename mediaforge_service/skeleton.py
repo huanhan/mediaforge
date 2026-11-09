@@ -27,7 +27,7 @@ class SkeletonRunner:
         success = False
         try:
             with log.open("wb") as stream:
-                process = subprocess.Popen([sys.executable, "-m", "minimaxh3_service.skeleton_worker", str(config)], cwd=str(Path(__file__).parent.parent), env=env, stdout=stream, stderr=subprocess.STDOUT,
+                process = subprocess.Popen([sys.executable, "-m", "mediaforge_service.skeleton_worker", str(config)], cwd=str(Path(__file__).parent.parent), env=env, stdout=stream, stderr=subprocess.STDOUT,
                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
                 while process.poll() is None:
                     if cancel.wait(.25): raise GenerationCanceled("skeleton canceled")

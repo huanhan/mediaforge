@@ -2,9 +2,9 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 import pytest
-from minimaxh3_service import setup_tts
-from minimaxh3_service.config import Settings
-from minimaxh3_service.speech import SpeechRunner
+from mediaforge_service import setup_tts
+from mediaforge_service.config import Settings
+from mediaforge_service.speech import SpeechRunner
 
 
 def test_setup_requires_explicit_noncommercial_acceptance(monkeypatch, tmp_path):
@@ -40,7 +40,7 @@ def test_runtime_uses_managed_python_and_never_launches_api(monkeypatch, tmp_pat
 
 
 def test_readiness_requires_acceptance_and_only_probes_imports(monkeypatch, tmp_path):
-    from minimaxh3_service import speech
+    from mediaforge_service import speech
     interpreter = tmp_path / "python.exe"
     interpreter.touch()
     monkeypatch.setattr(speech, "missing_model_files", lambda _: [])

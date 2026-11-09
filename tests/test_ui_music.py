@@ -6,7 +6,7 @@ import pytest
 
 def build_music(client):
     gr = pytest.importorskip("gradio")
-    from minimaxh3_service.ui_music import add_music_ui
+    from mediaforge_service.ui_music import add_music_ui
     with gr.Blocks() as demo:
         add_music_ui(client)
     return demo

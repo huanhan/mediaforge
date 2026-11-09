@@ -21,7 +21,7 @@ def main() -> None:
         print("Video UI: unavailable (install the ui extra to enable Gradio)", flush=True)
     print(f"API docs: {base_url}/docs", flush=True)
     uvicorn.run(
-        "minimaxh3_service.api:app",
+        "mediaforge_service.api:app",
         host=settings.host,
         port=settings.port,
         reload=False,

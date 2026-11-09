@@ -6,7 +6,7 @@ const API = 'http://127.0.0.1:8000/api/collector';
 async function serviceRequest(suffix = '', init = {}) {
   let response;
   try {response = await fetch(API + suffix, {...init, headers: {'X-Collector-Version': chrome.runtime.getManifest().version, 'X-Collector-Capture': 'true', ...init.headers}, signal: AbortSignal.timeout(suffix === '?mode=media' ? 30000 : 10000)});}
-  catch {throw Error('采集服务没有运行。请先启动 MiniMax H3 本地服务（python -m minimaxh3_service 或 start.cmd），然后重试。');}
+  catch {throw Error('采集服务没有运行。请先启动 MiniMax H3 本地服务（python -m mediaforge_service 或 start.cmd），然后重试。');}
   let payload;
   try {payload = await response.json();} catch {throw Error('端口 8000 上没有返回采集服务数据，请确认启动的是 MiniMax H3 本地服务。');}
   if (!response.ok) throw Error(payload.error || '采集服务拒绝了请求。');

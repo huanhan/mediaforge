@@ -1,5 +1,5 @@
 [project]
-name = "minimaxh3"
+name = "mediaforge"
 version = "0.1.0"
 description = "A standalone local MiniMax H3 CUDA video generation API"
 readme = "README.md"
@@ -96,23 +96,23 @@ local = [
 ]
 
 [project.scripts]
-minimaxh3 = "minimaxh3_service.__main__:main"
-minimaxh3-setup = "minimaxh3_service.setup_local:main"
-minimaxh3-setup-music = "minimaxh3_service.setup_music:main"
-minimaxh3-setup-depth = "minimaxh3_service.setup_depth:main"
-minimaxh3-setup-pose = "minimaxh3_service.setup_pose:main"
-minimaxh3-setup-beat = "minimaxh3_service.setup_beat:main"
-minimaxh3-setup-tts = "minimaxh3_service.setup_tts:main"
-minimaxh3-setup-asr = "minimaxh3_service.setup_asr:main"
-minimaxh3-openapi = "minimaxh3_service.export_openapi:main"
-minimaxh3-ui = "minimaxh3_service.ui:main"
+mediaforge = "mediaforge_service.__main__:main"
+mediaforge-setup = "mediaforge_service.setup_local:main"
+mediaforge-setup-music = "mediaforge_service.setup_music:main"
+mediaforge-setup-depth = "mediaforge_service.setup_depth:main"
+mediaforge-setup-pose = "mediaforge_service.setup_pose:main"
+mediaforge-setup-beat = "mediaforge_service.setup_beat:main"
+mediaforge-setup-tts = "mediaforge_service.setup_tts:main"
+mediaforge-setup-asr = "mediaforge_service.setup_asr:main"
+mediaforge-openapi = "mediaforge_service.export_openapi:main"
+mediaforge-ui = "mediaforge_service.ui:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["minimaxh3_service"]
+packages = ["mediaforge_service"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

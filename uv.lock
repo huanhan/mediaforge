@@ -1120,7 +1120,7 @@ wheels = [
 ]
 
 [[package]]
-name = "minimaxh3"
+name = "mediaforge"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

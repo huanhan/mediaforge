@@ -11,15 +11,15 @@ import pytest
 from pydantic import ValidationError
 from starlette.testclient import TestClient
 
-from minimaxh3_service.api import create_app
-from minimaxh3_service.backend import BackendError
-from minimaxh3_service.config import Settings
-from minimaxh3_service.local_backend import LocalGenerationBackend
-from minimaxh3_service.models import MusicRequest
-from minimaxh3_service.music import MusicRunner
-from minimaxh3_service.storage import LocalAssetStore
-from minimaxh3_service.tasks import GenerationCanceled, LocalTaskManager
-from minimaxh3_service.ui import VideoClient
+from mediaforge_service.api import create_app
+from mediaforge_service.backend import BackendError
+from mediaforge_service.config import Settings
+from mediaforge_service.local_backend import LocalGenerationBackend
+from mediaforge_service.models import MusicRequest
+from mediaforge_service.music import MusicRunner
+from mediaforge_service.storage import LocalAssetStore
+from mediaforge_service.tasks import GenerationCanceled, LocalTaskManager
+from mediaforge_service.ui import VideoClient
 
 
 class IdleRunner:
@@ -167,7 +167,7 @@ def test_settings_and_readiness(tmp_path, monkeypatch):
 @pytest.mark.parametrize("stdout,status", [('{"status":"ready"}\n\x1b[0m', "ready"), ("invalid output", "not_ready")])
 def test_readiness_probe_handles_console_suffix_and_invalid_output(monkeypatch, stdout, status):
     from pathlib import Path
-    from minimaxh3_service import music as module
+    from mediaforge_service import music as module
     monkeypatch.setattr(module, "missing_model_files", lambda _: [])
     monkeypatch.setattr(subprocess, "run", lambda *a, **kw: SimpleNamespace(returncode=0, stdout=stdout))
     runner = MusicRunner(Settings(music_python=Path(sys.executable)))
@@ -266,8 +266,8 @@ def test_ui_client_submits_music():
 def test_worker_maps_real_pipeline_contract_and_limits_audio(tmp_path, monkeypatch, duration):
     from contextlib import contextmanager
     np = pytest.importorskip("numpy")
-    from minimaxh3_service import music_memory
-    from minimaxh3_service.music_worker import generate
+    from mediaforge_service import music_memory
+    from mediaforge_service.music_worker import generate
     captured = {}
 
     @contextmanager

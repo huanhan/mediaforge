@@ -3,7 +3,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from minimaxh3_service.ui import VideoClient, build_ui
+from mediaforge_service.ui import VideoClient, build_ui
 
 
 @pytest.mark.parametrize("url,expected", [
@@ -206,8 +206,8 @@ def test_gradio_page_and_events():
 def test_ui_shares_api_app_and_preserves_auth_and_lifecycle(tmp_path, api_key):
     pytest.importorskip("gradio")
     from fastapi.testclient import TestClient
-    from minimaxh3_service.api import create_app
-    from minimaxh3_service.config import Settings
+    from mediaforge_service.api import create_app
+    from mediaforge_service.config import Settings
     from test_api import FakeLocalBackend
 
     backend = FakeLocalBackend(tmp_path / "result.mp4")
@@ -235,8 +235,8 @@ def test_ui_shares_api_app_and_preserves_auth_and_lifecycle(tmp_path, api_key):
 def test_mounted_client_uses_service_port(monkeypatch, host, expected):
     pytest.importorskip("gradio")
     from fastapi import FastAPI
-    from minimaxh3_service import ui
-    from minimaxh3_service.config import Settings
+    from mediaforge_service import ui
+    from mediaforge_service.config import Settings
 
     original = ui.build_ui
     clients = []

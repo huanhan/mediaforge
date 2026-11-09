@@ -39,7 +39,7 @@ def build(output: Path, runtime_source: Path | None, vc_runtime: Path) -> Path:
     if not uv:
         raise RuntimeError("The build machine needs uv; the released package does not")
     metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
-    name = f"minimaxh3-{metadata['version']}-windows-x64"
+    name = f"mediaforge-{metadata['version']}-windows-x64"
     output.mkdir(parents=True, exist_ok=True)
     package = output / name
     archive_path = output / f"{name}.zip"
@@ -78,13 +78,13 @@ def build(output: Path, runtime_source: Path | None, vc_runtime: Path) -> Path:
         "--requirements", str(requirements), "--require-hashes", "--no-deps",
         "--link-mode", "copy", "--index-strategy", "unsafe-best-match",
     ], cwd=ROOT, check=True)
-    app = package / "app" / "minimaxh3_service"
+    app = package / "app" / "mediaforge_service"
     app.mkdir(parents=True)
-    for source in sorted((ROOT / "minimaxh3_service").glob("*.py")):
+    for source in sorted((ROOT / "mediaforge_service").glob("*.py")):
         shutil.copy2(source, app / source.name)
-    shutil.copy2(ROOT / "minimaxh3_service" / "pose_models.json", app / "pose_models.json")
-    shutil.copy2(ROOT / "minimaxh3_service" / "breeze_tts_models.json", app / "breeze_tts_models.json")
-    shutil.copytree(ROOT / "minimaxh3_service" / "voice_presets", app / "voice_presets")
+    shutil.copy2(ROOT / "mediaforge_service" / "pose_models.json", app / "pose_models.json")
+    shutil.copy2(ROOT / "mediaforge_service" / "breeze_tts_models.json", app / "breeze_tts_models.json")
+    shutil.copytree(ROOT / "mediaforge_service" / "voice_presets", app / "voice_presets")
     package_runtimes(package / "runtime", runtime_source)
     for filename in ("start.cmd", "check.cmd", "launch.py", ".env.example"):
         shutil.copy2(ROOT / "packaging" / "windows" / filename, package / filename)

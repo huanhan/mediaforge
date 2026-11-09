@@ -60,7 +60,7 @@ def download(entry, root):
         if offset > entry["size"]:
             raise RuntimeError(f"Invalid partial model size: {partial}")
         try:
-            req = urllib.request.Request(entry["url"], headers={"Range": f"bytes={offset}-", "User-Agent": "minimaxh3-setup-pose"})
+            req = urllib.request.Request(entry["url"], headers={"Range": f"bytes={offset}-", "User-Agent": "mediaforge-setup-pose"})
             with urllib.request.urlopen(req, timeout=60) as response:
                 if response.status == 206:
                     if not response.headers.get("Content-Range", "").startswith(f"bytes {offset}-"):

@@ -8,15 +8,15 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 from starlette.testclient import TestClient
-from minimaxh3_service.api import create_app
-from minimaxh3_service.backend import OutputArtifact
-from minimaxh3_service.config import Settings
-from minimaxh3_service.local_backend import LocalGenerationBackend
-from minimaxh3_service.speech_models import SpeechRequest
-from minimaxh3_service.speech import SpeechRunner
-from minimaxh3_service.speech_worker import inference_options
-from minimaxh3_service.storage import LocalAssetStore
-from minimaxh3_service.tasks import LocalTaskManager, GenerationCanceled
+from mediaforge_service.api import create_app
+from mediaforge_service.backend import OutputArtifact
+from mediaforge_service.config import Settings
+from mediaforge_service.local_backend import LocalGenerationBackend
+from mediaforge_service.speech_models import SpeechRequest
+from mediaforge_service.speech import SpeechRunner
+from mediaforge_service.speech_worker import inference_options
+from mediaforge_service.storage import LocalAssetStore
+from mediaforge_service.tasks import LocalTaskManager, GenerationCanceled
 
 class Idle:
     def readiness(self): return {"status": "not_ready"}
@@ -52,7 +52,7 @@ def test_instruction_only_design_never_injects_a_reference():
 
 
 def test_segments_preserve_text_and_inline_events():
-    from minimaxh3_service.speech_worker import split_text
+    from mediaforge_service.speech_worker import split_text
     text = "你好。[叹气] 我不会认输！" * 40
     parts = split_text(text)
     assert len(parts) > 1
@@ -62,7 +62,7 @@ def test_segments_preserve_text_and_inline_events():
 
 def test_segment_rejects_generation_limit_even_if_codec_drops_frames():
     from types import SimpleNamespace
-    from minimaxh3_service.speech_worker import checked_audio_chunks
+    from mediaforge_service.speech_worker import checked_audio_chunks
     class Runtime:
         def __init__(self, steps, decoded):
             self.steps, self.decoded = steps, decoded

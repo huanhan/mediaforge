@@ -5,10 +5,10 @@ from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 
-from minimaxh3_service import api as api_module
-from minimaxh3_service import source_collector
-from minimaxh3_service.api import create_app
-from minimaxh3_service.config import Settings
+from mediaforge_service import api as api_module
+from mediaforge_service import source_collector
+from mediaforge_service.api import create_app
+from mediaforge_service.config import Settings
 
 from test_api import FakeLocalBackend
 

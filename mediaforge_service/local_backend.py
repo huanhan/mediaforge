@@ -137,7 +137,7 @@ class LocalGenerationBackend:
             )
         if request.mode.value == "ref2v" and not self.settings.model_paths["ref2va"].is_file():
             raise BackendError(
-                "Ref2V model is not installed; rerun minimaxh3-setup with --with-ref2v",
+                "Ref2V model is not installed; rerun mediaforge-setup with --with-ref2v",
                 status_code=503,
                 code="model_missing",
             )
@@ -148,7 +148,7 @@ class LocalGenerationBackend:
         ):
             raise BackendError(
                 "Ref2V acceleration LoRA is not installed; rerun "
-                "minimaxh3-setup with --with-ref2v",
+                "mediaforge-setup with --with-ref2v",
                 status_code=503,
                 code="model_missing",
             )
@@ -271,7 +271,7 @@ class LocalGenerationBackend:
             raise BackendError("alignment requires uploaded audio", status_code=415, code="invalid_audio")
         readiness = self.tasks.alignment_runner.readiness()
         if readiness.get("status") != "ready":
-            raise BackendError("Install the lyric aligner: python -m minimaxh3_service.setup_asr --aligner",
+            raise BackendError("Install the lyric aligner: python -m mediaforge_service.setup_asr --aligner",
                                status_code=503, code="alignment_not_ready", detail=readiness)
         return await self.tasks.submit_alignment(request)
 

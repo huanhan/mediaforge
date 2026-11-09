@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from minimaxh3_service.export_openapi import main
+from mediaforge_service.export_openapi import main
 
 
 def test_openapi_export_and_staleness_check(tmp_path: Path) -> None:

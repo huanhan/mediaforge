@@ -71,7 +71,7 @@ def main(argv=None):
     parser.add_argument("--title", default="")
     args = parser.parse_args(argv)
     if not args.model.is_file():
-        raise ValueError("Local Beat This! checkpoint is missing; run minimaxh3-setup-beat")
+        raise ValueError("Local Beat This! checkpoint is missing; run mediaforge-setup-beat")
     signal = np.fromfile(args.pcm, dtype="<f4")
     if len(signal) < SAMPLE_RATE or not np.all(np.isfinite(signal)):
         raise ValueError("Audio is empty, too short or contains non-finite samples")

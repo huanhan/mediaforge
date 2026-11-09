@@ -42,7 +42,7 @@ class MusicRunner:
     def readiness(self):
         missing = missing_model_files(self.settings.music_model_path.expanduser().resolve())
         if not self.settings.music_python.expanduser().is_file():
-            missing.append("YuE2 Python environment: run python -m minimaxh3_service.setup_music")
+            missing.append("YuE2 Python environment: run python -m mediaforge_service.setup_music")
         result = dict(status="not_ready", backend="yue2", model=MODEL_ID, vae=VAE_ID,
                       models_loaded=False, instrumental=True, lyrics=True, sample_rate=48000,
                       max_duration_seconds=MUSIC_MAX_DURATION_SECONDS, supports_interrupt=True,

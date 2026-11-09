@@ -3,7 +3,7 @@ import io
 
 import pytest
 
-from minimaxh3_service import setup_music
+from mediaforge_service import setup_music
 
 
 def test_range_download_resumes_verifies_and_publishes(tmp_path, monkeypatch):

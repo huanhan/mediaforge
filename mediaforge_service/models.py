@@ -368,7 +368,7 @@ class UpscaleRequest(BaseModel):
         json_schema_extra={
             "examples": [
                 {
-                    "file_id": "minimaxh3/20260822/source.mp4",
+                    "file_id": "mediaforge/20260822/source.mp4",
                     "width": 1280,
                     "height": 768,
                     "seed": 42,

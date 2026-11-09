@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from minimaxh3_service.backend import BackendError, OutputArtifact
-from minimaxh3_service.config import Settings
-from minimaxh3_service.local_backend import LocalGenerationBackend
-from minimaxh3_service.models import GenerationRequest
-from minimaxh3_service.workflow import GenerationPlan
+from mediaforge_service.backend import BackendError, OutputArtifact
+from mediaforge_service.config import Settings
+from mediaforge_service.local_backend import LocalGenerationBackend
+from mediaforge_service.models import GenerationRequest
+from mediaforge_service.workflow import GenerationPlan
 
 
 class NotReadyRunner:

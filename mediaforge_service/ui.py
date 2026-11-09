@@ -123,7 +123,7 @@ class VideoClient:
         with self.connect() as client:
             capabilities = self.unpack(client.get("v1/models"))["capabilities"].get("skeleton", {})
             if not capabilities.get("available"):
-                raise ValueError("本地 DWPose 未就绪，请运行 python -m minimaxh3_service.setup_pose 后重启服务。")
+                raise ValueError("本地 DWPose 未就绪，请运行 python -m mediaforge_service.setup_pose 后重启服务。")
             def upload(path, kind):
                 with Path(path).open("rb") as source:
                     return self.unpack(client.post("v1/files", data={"kind": kind},

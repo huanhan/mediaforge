@@ -95,7 +95,7 @@ API 和 Gradio 界面共用一个端口（默认 `8000`）：
 导入交付包（TAR）并启动，在包含 TAR 和 `compose.yaml` 的目录中执行：
 
 ```bash
-docker load -i minimaxh3-<版本>-linux-amd64.docker.tar
+docker load -i mediaforge-<版本>-linux-amd64.docker.tar
 docker compose up -d --no-build --pull never
 docker compose logs -f
 docker compose down
@@ -109,18 +109,18 @@ docker compose down
 docker run --rm --gpus all --shm-size=8g -p 127.0.0.1:8000:8000 \
   --mount type=bind,source=/absolute/path/models,target=/models,readonly \
   --mount type=bind,source=/absolute/path/data,target=/data \
-  minimaxh3:<版本>
+  mediaforge:<版本>
 ```
 
 ### 方式三：源码安装（开发与自定义）
 
 ```powershell
 uv sync --extra local --extra dev
-uv run minimaxh3-setup --accept-license
-uv run minimaxh3
+uv run mediaforge-setup --accept-license
+uv run mediaforge
 ```
 
-`minimaxh3-setup` 会：
+`mediaforge-setup` 会：
 
 1. 只检出固定提交的 ComfyUI 推理内核到 `.runtime/ComfyUI`，不安装 UI 或启动 ComfyUI。
 2. 检出固定提交的 SeedVR2 推理后端到 `.runtime/SeedVR2`。
@@ -131,16 +131,16 @@ uv run minimaxh3
 常用选项：
 
 ```powershell
-uv run minimaxh3-setup --accept-license --with-ref2v            # 额外下载 Ref2V（视频编辑、参考素材生成）
-uv run minimaxh3-setup --accept-license --without-upscale       # 不装超分后端和权重
-uv run minimaxh3-setup --accept-license --without-acceleration-lora  # 不下载 Turbo LoRA
+uv run mediaforge-setup --accept-license --with-ref2v            # 额外下载 Ref2V（视频编辑、参考素材生成）
+uv run mediaforge-setup --accept-license --without-upscale       # 不装超分后端和权重
+uv run mediaforge-setup --accept-license --without-acceleration-lora  # 不下载 Turbo LoRA
 ```
 
 Gradio 界面需要 `ui` 扩展：
 
 ```powershell
 uv sync --extra local --extra dev --extra ui
-uv run --extra ui minimaxh3
+uv run --extra ui mediaforge
 ```
 
 ## 模型目录
@@ -197,7 +197,7 @@ models/
 ## 启动与检查
 
 ```powershell
-uv run minimaxh3
+uv run mediaforge
 Invoke-RestMethod http://127.0.0.1:8000/readyz | ConvertTo-Json -Depth 6
 ```
 
@@ -219,7 +219,7 @@ Invoke-RestMethod http://127.0.0.1:8000/readyz | ConvertTo-Json -Depth 6
 - 设置 `H3_API_KEY` 后，界面登录用户名为 `h3`，密码为该 Key。
 - 结果副本保存在系统临时目录的 `h3-ui-*` 文件夹，API 原始输出仍在服务的数据目录。
 
-仅需远程连接时，可以使用独立客户端：`uv run --extra ui minimaxh3-ui --api-url http://server:8000 --port 7860`，它读取 `H3_BASE_URL` 和 `H3_API_KEY`。
+仅需远程连接时，可以使用独立客户端：`uv run --extra ui mediaforge-ui --api-url http://server:8000 --port 7860`，它读取 `H3_BASE_URL` 和 `H3_API_KEY`。
 
 ### HTTP 调用
 
@@ -359,7 +359,7 @@ Gradio 的“视频编辑”Tab 与“视频生成”Tab 独立。编辑 Tab 默
 
 ```powershell
 $body = @{
-  file_id = "minimaxh3/20260822/source-abcd1234.png"
+  file_id = "mediaforge/20260822/source-abcd1234.png"
   width = 2336
   height = 3520
   seed = 42
@@ -377,8 +377,8 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/v1/upscales `
 
 ```powershell
 uv sync --extra local --extra asr --extra beat --extra dev
-uv run --no-sync minimaxh3-setup-asr
-uv run --no-sync minimaxh3
+uv run --no-sync mediaforge-setup-asr
+uv run --no-sync mediaforge
 ```
 
 - 需要 Python 3.13 和 PATH 中的 FFmpeg。模型约 4.1 GB，官方原生 Transformers 格式，不依赖旧版 `qwen-asr` 包。
@@ -402,7 +402,7 @@ uv run --no-sync minimaxh3
 人工确认歌词后再对齐，获得字幕时间轴和逐字时间戳：
 
 ```powershell
-.venv/Scripts/python.exe -m minimaxh3_service.setup_asr --aligner
+.venv/Scripts/python.exe -m mediaforge_service.setup_asr --aligner
 ```
 
 `POST /v1/audio/alignments` 的请求为 `{"file_id":"...","lyrics":"第一行\n第二行","language":"zh"}`，支持 `zh`、`en`、`yue`，任务类型为 `alignment`。
@@ -418,7 +418,7 @@ uv run --no-sync minimaxh3
 
 ```powershell
 uv sync --extra local --extra beat --extra dev
-uv run --no-sync minimaxh3-setup-beat
+uv run --no-sync mediaforge-setup-beat
 ```
 
 模型约 81 MB，代码与模型为上游 MIT 许可。FFmpeg 必须在 PATH 中。默认 CPU 推理，API 任务只读取本地权重。
@@ -444,7 +444,7 @@ uv run --no-sync minimaxh3-setup-beat
 
 ```powershell
 uv sync --extra local --extra depth --extra ui --extra dev
-uv run --no-sync python -m minimaxh3_service.setup_depth
+uv run --no-sync python -m mediaforge_service.setup_depth
 ```
 
 已有环境可用 `uv pip install --python .venv/Scripts/python.exe "easydict>=1.13,<2"` 补充依赖。安装脚本固定官方源码和模型版本，不覆盖已有权重。只支持 **Small 相对深度权重**，不能替换为 Base、Large 或 metric 权重。
@@ -452,7 +452,7 @@ uv run --no-sync python -m minimaxh3_service.setup_depth
 请求示例：
 
 ```json
-{"file_id": "minimaxh3/20260916/source-xxxx.mp4", "input_size": 392, "max_resolution": 768, "save_raw": true}
+{"file_id": "mediaforge/20260916/source-xxxx.mp4", "input_size": 392, "max_resolution": 768, "save_raw": true}
 ```
 
 - 输出无声灰度 MP4，近处更亮，远处更暗。整段共用归一化范围。
@@ -469,7 +469,7 @@ uv run --no-sync python -m minimaxh3_service.setup_depth
 
 ```powershell
 uv sync --extra local --extra pose
-uv run python -m minimaxh3_service.setup_pose
+uv run python -m mediaforge_service.setup_pose
 ```
 
 ```json
@@ -489,8 +489,8 @@ uv run python -m minimaxh3_service.setup_pose
 YuE2 使用独立的 Python 3.12 环境（固定 PyTorch 2.10.0 / Transformers 4.57.6），不修改 H3 的环境。需先安装 Git、uv 和 NVIDIA 驱动。
 
 ```powershell
-python -m minimaxh3_service.setup_music
-python -m minimaxh3_service
+python -m mediaforge_service.setup_music
+python -m mediaforge_service
 ```
 
 - 安装器通过 uv 创建 `.runtime/yue2-env`，安装 CUDA 12.8 PyTorch 和固定提交的 YuE2，并把模型下载到 `models/music/yue2/`（约 7.8 GB，固定 SHA-256 校验，可续传）。
@@ -567,7 +567,7 @@ python -m pip install --no-build-isolation hydra-core iopath imageio imageio-ffm
 
 ```json
 {
-  "file_id": "minimaxh3/20260915/example.mp4",
+  "file_id": "mediaforge/20260915/example.mp4",
   "objects": [
     {"id": "person", "frame_index": 0, "box": [0.1, 0.1, 0.4, 0.9]},
     {"id": "dog", "frame_index": 30, "box": [0.5, 0.5, 0.8, 0.9]}
@@ -595,7 +595,7 @@ python -m pip install --no-build-isolation hydra-core iopath imageio imageio-ffm
 ### 独立命令行（单目标）
 
 ```powershell
-.venv/Scripts/python.exe -m minimaxh3_service.video_remove `
+.venv/Scripts/python.exe -m mediaforge_service.video_remove `
   --video input.mp4 --output outputs/remove-person-01 `
   --propainter .runtime/ProPainter `
   --sam2-checkpoint models/sam2/sam2.1_hiera_tiny.pt `
@@ -617,10 +617,10 @@ Breeze TTS 2 支持预设音色、参考音频克隆、表演指令和音色设�
 请先阅读 [完整模型许可](licenses/BREEZE_MODEL_LICENSE.txt)。用户须自行确认用途并接受许可后执行：
 
 ```powershell
-.venv/Scripts/python.exe -m minimaxh3_service.setup_tts --accept-non-commercial-license
+.venv/Scripts/python.exe -m mediaforge_service.setup_tts --accept-non-commercial-license
 ```
 
-安装器固定源码、模型版本和 SHA-256（`minimaxh3_service/breeze_tts_models.json`），用 uv 创建独立 CPython 3.11 环境：
+安装器固定源码、模型版本和 SHA-256（`mediaforge_service/breeze_tts_models.json`），用 uv 创建独立 CPython 3.11 环境：
 
 - `.runtime/breeze-tts-env`：Torch / Torchaudio 2.9.1 CUDA 12.8。
 - `.runtime/breeze-tts-src`：固定版本的推理源码。
@@ -685,8 +685,8 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/v1/collections `
 仓库中的静态文档 [openapi.json](openapi.json) 可导入 Swagger Editor、Postman 等 OpenAPI 3.1 工具。修改接口后请重新生成并检查：
 
 ```powershell
-uv run minimaxh3-openapi
-uv run minimaxh3-openapi --check
+uv run mediaforge-openapi
+uv run mediaforge-openapi --check
 ```
 
 对接时的通用约定：
@@ -781,13 +781,13 @@ python scripts/build_portable.py --output dist/release-003 --runtime-source .run
 
 脚本会下载便携 Python 3.13.7、复制运行库、按 `uv.lock` 和哈希安装依赖、复制应用，然后生成文件清单、压缩 ZIP 和 SHA-256 校验文件。不下载模型。
 
-产物：`minimaxh3-<版本>-windows-x64.zip` 及 `.zip.sha256`。展开目录也保存在输出目录中，供本机检查。
+产物：`mediaforge-<版本>-windows-x64.zip` 及 `.zip.sha256`。展开目录也保存在输出目录中，供本机检查。
 
 验证（需要 Windows NVIDIA GPU）：
 
 ```powershell
-python scripts/verify_portable.py dist/release-003/minimaxh3-<版本>-windows-x64.zip --destination dist/verify-003
-python scripts/verify_portable.py dist/release-003/minimaxh3-<版本>-windows-x64.zip --destination dist/verify-003-models --models <项目根目录>\models
+python scripts/verify_portable.py dist/release-003/mediaforge-<版本>-windows-x64.zip --destination dist/verify-003
+python scripts/verify_portable.py dist/release-003/mediaforge-<版本>-windows-x64.zip --destination dist/verify-003-models --models <项目根目录>\models
 ```
 
 验证脚本会校验文件、检查依赖与 CUDA，并临时启动服务做 HTTP 验证，但不执行完整视频生成。交付前还需手动打开 `/ui/`，生成一个短视频并检查预览和下载。
@@ -804,15 +804,15 @@ python scripts/build_docker.py --output dist/release-004 --skip-build   # 仅导
 只构建本地镜像：
 
 ```powershell
-docker build --platform linux/amd64 --progress plain -t minimaxh3:<版本> .
-docker image inspect minimaxh3:<版本> --format '{{.Os}}/{{.Architecture}}'   # 应为 linux/amd64
+docker build --platform linux/amd64 --progress plain -t mediaforge:<版本> .
+docker image inspect mediaforge:<版本> --format '{{.Os}}/{{.Architecture}}'   # 应为 linux/amd64
 ```
 
 Docker 构建上下文采用允许清单（`.dockerignore`），只有应用源码、依赖锁、`LICENSE` 和运行时导出脚本会被发送。发行镜像不读取项目 `models/`、`data/`、`outputs/` 或 `.env`。
 
 ### 发布新版本
 
-1. 同步修改 `pyproject.toml` 的 `version`、`minimaxh3_service/__init__.py` 的 `__version__`，以及 `compose.yaml` 的镜像标签。
+1. 同步修改 `pyproject.toml` 的 `version`、`mediaforge_service/__init__.py` 的 `__version__`，以及 `compose.yaml` 的镜像标签。
 2. 只有依赖或版本变化时才执行 `uv lock`。
 3. 重新执行构建脚本，不要用 `--skip-build` 代替重新构建。
 4. 检查校验文件，试启动，验证 `/ui/`、`/docs` 和一次真实生成。
@@ -841,7 +841,7 @@ Copy-Item -Recurse -Force skills/h3-* .claude/skills/
 
 ### 2. 前提
 
-- 本地服务已启动：`uv run minimaxh3`（或 Windows 包的 `start.cmd`），并确认 `http://127.0.0.1:8000/readyz` 可访问。
+- 本地服务已启动：`uv run mediaforge`（或 Windows 包的 `start.cmd`），并确认 `http://127.0.0.1:8000/readyz` 可访问。
 - Skill 使用 `curl` 调用，Windows 用户请使用 Git Bash 或 WSL 中的 `curl`，或让 Claude 使用 `curl.exe`。
 - 若设置了 `H3_API_KEY`，在启动 Claude Code 的环境中同时设置同一个 `H3_API_KEY`，Skill 会自动加上 `X-API-Key` 请求头。
 - Skill 只负责调用，不会替你下载模型。缺模型时 Skill 会读取 `/readyz` 的 `missing_models` 并告诉你缺什么。

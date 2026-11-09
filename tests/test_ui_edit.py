@@ -4,7 +4,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from minimaxh3_service.ui import VideoClient, build_ui
+from mediaforge_service.ui import VideoClient, build_ui
 
 
 def callback(demo, name):

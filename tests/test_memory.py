@@ -3,8 +3,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from minimaxh3_service.config import Settings
-from minimaxh3_service.memory import (
+from mediaforge_service.config import Settings
+from mediaforge_service.memory import (
     GenerationMemoryError, check_allocation, chunked_linear, chunked_mlp,
     chunked_rope, h3_memory_scope, mlp_scope,
 )
@@ -156,7 +156,7 @@ def test_scope_restores_state(backend, fail, mlp_rows):
     device = torch.device("cuda:0")
     with (
         patch.object(registry, "get_capable_backend", return_value=backend),
-        patch("minimaxh3_service.memory.mlp_scope", wraps=mlp_scope) as scoped,
+        patch("mediaforge_service.memory.mlp_scope", wraps=mlp_scope) as scoped,
     ):
         try:
             with h3_memory_scope(fake, device, Settings(mlp_chunk_rows=mlp_rows),

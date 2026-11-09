@@ -6,16 +6,16 @@ from typing import Any, Literal
 from fastapi import UploadFile
 from starlette.testclient import TestClient
 
-from minimaxh3_service.api import create_app
-from minimaxh3_service.backend import (
+from mediaforge_service.api import create_app
+from mediaforge_service.backend import (
     BackendSubmission,
     BackendTask,
     OutputArtifact,
     StoredAsset,
     UpscaleSubmission,
 )
-from minimaxh3_service.config import Settings
-from minimaxh3_service.models import GenerationRequest, UpscaleRequest, VideoEditRequest
+from mediaforge_service.config import Settings
+from mediaforge_service.models import GenerationRequest, UpscaleRequest, VideoEditRequest
 
 
 class FakeLocalBackend:
@@ -53,9 +53,9 @@ class FakeLocalBackend:
         kind: Literal["image", "video", "audio"],
     ) -> StoredAsset:
         return StoredAsset(
-            file_id="minimaxh3/20260808/start-123.png",
+            file_id="mediaforge/20260808/start-123.png",
             filename="start-123.png",
-            subfolder="minimaxh3/20260808",
+            subfolder="mediaforge/20260808",
             kind=kind,
         )
 
@@ -167,7 +167,7 @@ def test_upscale_submit_query_and_png_download(tmp_path: Path) -> None:
         submitted = client.post(
             "/v1/upscales",
             json={
-                "file_id": "minimaxh3/20260808/source.png",
+                "file_id": "mediaforge/20260808/source.png",
                 "width": 1024,
                 "height": 768,
                 "seed": 7,
@@ -217,7 +217,7 @@ def test_upscale_video_submit_query_and_mp4_download(tmp_path: Path) -> None:
         submitted = client.post(
             "/v1/upscales",
             json={
-                "file_id": "minimaxh3/20260822/generated.mp4",
+                "file_id": "mediaforge/20260822/generated.mp4",
                 "width": 1024,
                 "height": 768,
                 "seed": 7,

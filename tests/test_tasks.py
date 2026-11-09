@@ -2,10 +2,10 @@ import asyncio
 import threading
 from pathlib import Path
 
-from minimaxh3_service.backend import OutputArtifact
-from minimaxh3_service.models import GenerationRequest, UpscaleRequest
-from minimaxh3_service.tasks import LocalTaskManager
-from minimaxh3_service.workflow import GenerationPlan
+from mediaforge_service.backend import OutputArtifact
+from mediaforge_service.models import GenerationRequest, UpscaleRequest
+from mediaforge_service.tasks import LocalTaskManager
+from mediaforge_service.workflow import GenerationPlan
 
 
 class StubRunner:

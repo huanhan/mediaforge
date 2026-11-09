@@ -6,7 +6,7 @@
 !uv.lock
 !README.md
 !LICENSE
-!minimaxh3_service/
-!minimaxh3_service/*.py
+!mediaforge_service/
+!mediaforge_service/*.py
 !scripts/
 !scripts/package_runtime.py

@@ -26,7 +26,7 @@ WEIGHT_SUFFIXES = {".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".gguf", ".on
 
 
 def pinned_commit(filename: str, constant: str) -> str:
-    tree = ast.parse((ROOT / "minimaxh3_service" / filename).read_text(encoding="utf-8"))
+    tree = ast.parse((ROOT / "mediaforge_service" / filename).read_text(encoding="utf-8"))
     for node in tree.body:
         if isinstance(node, ast.Assign) and any(
             isinstance(target, ast.Name) and target.id == constant for target in node.targets

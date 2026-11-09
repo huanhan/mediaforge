@@ -46,7 +46,7 @@ class LocalAssetStore:
         *,
         kind: Literal["image", "video", "audio"],
     ) -> StoredAsset:
-        subfolder = f"minimaxh3/{datetime.now(UTC):%Y%m%d}"
+        subfolder = f"mediaforge/{datetime.now(UTC):%Y%m%d}"
         filename = safe_upload_name(upload.filename)
         folder = _inside(self.input_root, self.input_root / subfolder, strict=False)
         folder.mkdir(parents=True, exist_ok=True)

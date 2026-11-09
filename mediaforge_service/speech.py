@@ -22,7 +22,7 @@ class SpeechRunner(MusicRunner):
     def readiness(self):
         missing = []
         if not self.settings.tts_python.is_file():
-            missing.append("Run python -m minimaxh3_service.setup_tts")
+            missing.append("Run python -m mediaforge_service.setup_tts")
         if not shutil.which("ffmpeg"):
             missing.append("ffmpeg")
         absent = missing_model_files(self.settings.tts_model_path)

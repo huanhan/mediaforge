@@ -10,7 +10,7 @@ repository is https://github.com/comfy-org/ComfyUI. SeedVR2 source and its licen
 are included in runtime/SeedVR2; its repository is
 https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler.
 The precise source commits and resource hashes are in runtime/runtime-manifest.json.
-In Docker, the corresponding directory is /opt/minimaxh3.
+In Docker, the corresponding directory is /opt/mediaforge.
 
 SeedVR2's pos_emb.pt and neg_emb.pt (about 1.2 MB combined) are fixed prompt
 embeddings from its pinned source tree, required by its inference code. They are
@@ -27,7 +27,7 @@ Model licenses apply separately to models downloaded by the user; see MODELS.md.
 
 The optional local skeleton extractor uses DWPose ONNX weights from
 https://huggingface.co/yzd-v/DWPose. Download locations and SHA-256 checksums
-are recorded in minimaxh3_service/pose_models.json. These optional models are
+are recorded in mediaforge_service/pose_models.json. These optional models are
 not bundled with the application. Setup and API details are in SKELETON.md.
 
 ## Optional Breeze TTS 2 speech

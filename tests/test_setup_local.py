@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-from minimaxh3_service.setup_local import (
+from mediaforge_service.setup_local import (
     FL2VA_ACCELERATION_LORA_FILE,
     REF2VA_ACCELERATION_LORA_FILE,
     UPSCALE_MODEL_FILES,

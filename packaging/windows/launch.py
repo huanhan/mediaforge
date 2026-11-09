@@ -27,12 +27,12 @@ def main() -> int:
     for key, value in defaults.items():
         os.environ.setdefault(key, value)
     os.environ.setdefault("H3_UPSCALE_MODEL_DIR", str(Path(os.environ["H3_MODEL_DIR"]) / "SEEDVR2"))
-    from minimaxh3_service.config import Settings
+    from mediaforge_service.config import Settings
 
     settings = Settings.from_env()
     if args.check:
-        from minimaxh3_service.native import NativeH3Runner
-        from minimaxh3_service.upscale import SeedVR2UpscaleRunner
+        from mediaforge_service.native import NativeH3Runner
+        from mediaforge_service.upscale import SeedVR2UpscaleRunner
 
         video = NativeH3Runner(settings, lambda _: Path()).readiness()
         upscale = SeedVR2UpscaleRunner(settings, lambda _: Path()).readiness()
@@ -43,7 +43,7 @@ def main() -> int:
     settings.upscale_model_root.mkdir(parents=True, exist_ok=True)
     print(f"Models: {settings.model_root.resolve()}", flush=True)
     print(f"Data: {settings.data_root.resolve()}", flush=True)
-    from minimaxh3_service.__main__ import main as serve
+    from mediaforge_service.__main__ import main as serve
 
     serve()
     return 0

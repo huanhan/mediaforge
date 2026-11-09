@@ -95,7 +95,7 @@ class BeatAnalysisRunner:
                 raise ValueError("Audio must contain at least one second of decodable samples")
             progress(0.2)
             self._run([
-                sys.executable, "-m", "minimaxh3_service.beat_worker", "--pcm", str(pcm),
+                sys.executable, "-m", "mediaforge_service.beat_worker", "--pcm", str(pcm),
                 "--output", str(partial), "--model", str(self.settings.beat_model_path.expanduser().resolve()),
                 "--device", self.settings.beat_device, "--threads", str(self.settings.beat_cpu_threads),
                 "--file-id", request.file_id, "--title", request.title,

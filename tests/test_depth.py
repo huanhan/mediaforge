@@ -8,14 +8,14 @@ import pytest
 from pydantic import ValidationError
 from starlette.testclient import TestClient
 
-from minimaxh3_service.api import create_app
-from minimaxh3_service.backend import BackendError, OutputArtifact
-from minimaxh3_service.config import Settings
-from minimaxh3_service.depth import VideoDepthRunner
-from minimaxh3_service.depth_worker import read_frames, write_depths
-from minimaxh3_service.local_backend import LocalGenerationBackend
-from minimaxh3_service.models import DepthRequest
-from minimaxh3_service.tasks import GenerationCanceled
+from mediaforge_service.api import create_app
+from mediaforge_service.backend import BackendError, OutputArtifact
+from mediaforge_service.config import Settings
+from mediaforge_service.depth import VideoDepthRunner
+from mediaforge_service.depth_worker import read_frames, write_depths
+from mediaforge_service.local_backend import LocalGenerationBackend
+from mediaforge_service.models import DepthRequest
+from mediaforge_service.tasks import GenerationCanceled
 
 
 class IdleRunner:
@@ -131,7 +131,7 @@ def test_cancel_terminates_worker_and_cleans_partial_files(tmp_path):
     for suffix in (".npz", ".partial.npz", ".partial.mp4"):
         output.path.with_suffix(suffix).touch()
     runner = VideoDepthRunner(Settings(), lambda _: tmp_path / "source.mp4")
-    with patch("minimaxh3_service.depth.subprocess.Popen", return_value=process):
+    with patch("mediaforge_service.depth.subprocess.Popen", return_value=process):
         with pytest.raises(GenerationCanceled):
             runner.process(DepthRequest(file_id="x.mp4"), output, cancel, lambda _: None)
     assert process.terminated

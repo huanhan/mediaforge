@@ -5,10 +5,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from minimaxh3_service.config import Settings
-from minimaxh3_service.models import GenerationMode, GenerationRequest
-from minimaxh3_service.native import NativeH3Runner
-from minimaxh3_service.workflow import build_plan
+from mediaforge_service.config import Settings
+from mediaforge_service.models import GenerationMode, GenerationRequest
+from mediaforge_service.native import NativeH3Runner
+from mediaforge_service.workflow import build_plan
 
 
 def runner(settings: Settings) -> NativeH3Runner:
@@ -141,8 +141,8 @@ def test_disabled_acceleration_lora_uses_server_base_sampling_parameters() -> No
 
 def test_readiness_requires_acceleration_lora_only_when_enabled(tmp_path: Path) -> None:
     with (
-        patch("minimaxh3_service.native.importlib.util.find_spec", return_value=None),
-        patch("minimaxh3_service.native.validate_mp4_encoders"),
+        patch("mediaforge_service.native.importlib.util.find_spec", return_value=None),
+        patch("mediaforge_service.native.validate_mp4_encoders"),
     ):
         enabled = runner(
             Settings(model_root=tmp_path, enable_acceleration_lora=True)
@@ -177,7 +177,7 @@ def test_release_models_unloads_references_and_keeps_runtime() -> None:
     instance._video_vae = object()
     instance._audio_vae = object()
 
-    with patch("minimaxh3_service.native.gc.collect") as collect:
+    with patch("mediaforge_service.native.gc.collect") as collect:
         instance.release_models()
 
     assert instance._core is core
@@ -207,7 +207,7 @@ def test_close_releases_models_and_closes_dynamic_runtime() -> None:
     instance._model = object()
     instance._model_mode = GenerationMode.REF2V
 
-    with patch("minimaxh3_service.native.gc.collect"):
+    with patch("mediaforge_service.native.gc.collect"):
         instance.close()
 
     assert instance._core is core
@@ -221,8 +221,8 @@ def test_close_releases_models_and_closes_dynamic_runtime() -> None:
 
 def test_generation_oom_has_actionable_error_and_unloads_models(tmp_path: Path) -> None:
     import threading
-    from minimaxh3_service.backend import OutputArtifact
-    from minimaxh3_service.memory import GenerationMemoryError
+    from mediaforge_service.backend import OutputArtifact
+    from mediaforge_service.memory import GenerationMemoryError
     torch = pytest.importorskip("torch")
     instance = runner(Settings(device="cpu"))
     core = fake_core()

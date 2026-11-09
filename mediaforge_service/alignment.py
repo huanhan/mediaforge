@@ -17,7 +17,7 @@ class AlignmentRunner(TranscriptionRunner):
 
     def worker_arguments(self, request, pcm, partial, extra):
         extra.write_text(request.model_dump_json(), encoding="utf-8")
-        return [sys.executable, "-m", "minimaxh3_service.alignment_worker", "--pcm", str(pcm),
+        return [sys.executable, "-m", "mediaforge_service.alignment_worker", "--pcm", str(pcm),
                 "--output", str(partial), "--request", str(extra),
                 "--model", str(self.settings.aligner_model_path.expanduser().resolve()),
                 "--asr-model", str(self.settings.asr_model_path.expanduser().resolve()),

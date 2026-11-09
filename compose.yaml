@@ -1,6 +1,6 @@
 services:
-  minimaxh3:
-    image: minimaxh3:0.1.0
+  mediaforge:
+    image: mediaforge:0.1.0
     build: .
     gpus: all
     ports:

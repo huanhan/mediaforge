@@ -7,10 +7,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from minimaxh3_service.config import Settings
-from minimaxh3_service.backend import OutputArtifact
-from minimaxh3_service.models import UpscaleRequest
-from minimaxh3_service.upscale import SeedVR2UpscaleRunner
+from mediaforge_service.config import Settings
+from mediaforge_service.backend import OutputArtifact
+from mediaforge_service.models import UpscaleRequest
+from mediaforge_service.upscale import SeedVR2UpscaleRunner
 
 
 def make_runner(settings: Settings) -> SeedVR2UpscaleRunner:
@@ -31,7 +31,7 @@ def test_readiness_checks_runtime_models_and_dependencies(tmp_path: Path) -> Non
     for path in settings.upscale_model_paths.values():
         path.touch()
 
-    with patch("minimaxh3_service.upscale.importlib.util.find_spec", return_value=object()):
+    with patch("mediaforge_service.upscale.importlib.util.find_spec", return_value=object()):
         readiness = make_runner(settings).readiness()
 
     assert readiness["status"] == "ready"
@@ -84,9 +84,9 @@ def test_release_models_clears_seedvr2_global_cache_and_runner() -> None:
     }
     memory = SimpleNamespace(complete_cleanup=MagicMock())
 
-    with patch("minimaxh3_service.upscale.gc.collect") as collect:
+    with patch("mediaforge_service.upscale.gc.collect") as collect:
         with patch(
-            "minimaxh3_service.upscale.importlib.import_module",
+            "mediaforge_service.upscale.importlib.import_module",
             return_value=memory,
         ):
             instance.release_models()
@@ -122,9 +122,9 @@ def test_release_failure_keeps_cache_state_for_retry() -> None:
     }
     memory = SimpleNamespace(complete_cleanup=MagicMock())
 
-    with patch("minimaxh3_service.upscale.gc.collect"):
+    with patch("mediaforge_service.upscale.gc.collect"):
         with patch(
-            "minimaxh3_service.upscale.importlib.import_module",
+            "mediaforge_service.upscale.importlib.import_module",
             return_value=memory,
         ):
             with pytest.raises(RuntimeError, match="fully release"):
@@ -189,14 +189,14 @@ def test_video_upscale_uses_video_fps_and_preserves_optional_audio(tmp_path: Pat
     runner.resolve_input = lambda _: source
 
     with patch(
-        "minimaxh3_service.upscale.load_video",
+        "mediaforge_service.upscale.load_video",
         return_value=(frames, Fraction(12, 1)),
     ) as load_video:
         with patch(
-            "minimaxh3_service.upscale.load_audio",
+            "mediaforge_service.upscale.load_audio",
             return_value=audio,
         ) as load_audio:
-            with patch("minimaxh3_service.upscale.save_mp4") as save_mp4:
+            with patch("mediaforge_service.upscale.save_mp4") as save_mp4:
                 runner.upscale(
                     UpscaleRequest(file_id="source.mp4", width=64, height=64, seed=11),
                     output,

@@ -7,12 +7,12 @@ import wave
 
 import pytest
 
-from minimaxh3_service.alignment import AlignmentRunner
-from minimaxh3_service.backend import OutputArtifact
-from minimaxh3_service.beat import BeatAnalysisRunner
-from minimaxh3_service.config import Settings
-from minimaxh3_service.models import AlignmentRequest, BeatAnalysisRequest, TranscriptionRequest
-from minimaxh3_service.transcription import TranscriptionRunner
+from mediaforge_service.alignment import AlignmentRunner
+from mediaforge_service.backend import OutputArtifact
+from mediaforge_service.beat import BeatAnalysisRunner
+from mediaforge_service.config import Settings
+from mediaforge_service.models import AlignmentRequest, BeatAnalysisRequest, TranscriptionRequest
+from mediaforge_service.transcription import TranscriptionRunner
 
 
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="FFmpeg is required")

@@ -16,9 +16,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def build(output: Path, skip_build: bool) -> None:
     version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-    tag = f"minimaxh3:{version}"
+    tag = f"mediaforge:{version}"
     output.mkdir(parents=True, exist_ok=True)
-    archive = output / f"minimaxh3-{version}-linux-amd64.docker.tar"
+    archive = output / f"mediaforge-{version}-linux-amd64.docker.tar"
     if archive.exists():
         raise FileExistsError(f"Artifact exists: {archive}; choose another --output directory")
     if not skip_build:

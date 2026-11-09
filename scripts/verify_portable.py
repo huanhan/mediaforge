@@ -63,9 +63,9 @@ def verify(archive: Path, destination: Path, models: Path | None, skip_extract: 
             environment["H3_UPSCALE_RUNTIME_PATH"] = str(package / "runtime" / "SeedVR2")
             smoke = (
                 "from pathlib import Path; import torch; "
-                "from minimaxh3_service.config import Settings; "
-                "from minimaxh3_service.native import NativeH3Runner; "
-                "from minimaxh3_service.upscale import SeedVR2UpscaleRunner; "
+                "from mediaforge_service.config import Settings; "
+                "from mediaforge_service.native import NativeH3Runner; "
+                "from mediaforge_service.upscale import SeedVR2UpscaleRunner; "
                 "s=Settings.from_env(); r=NativeH3Runner(s,lambda _:Path()); "
                 "r._import_core(); u=SeedVR2UpscaleRunner(s,lambda _:Path()); "
                 "u._build_args(u._import_cli()); "

@@ -19,7 +19,7 @@ from .tasks import GenerationCanceled
 
 logger = logging.getLogger(__name__)
 SEEDVR2_COMMIT = "4490bd1f482e026674543386bb2a4d176da245b9"
-SEEDVR2_MODULE_NAME = "_minimaxh3_seedvr2_cli"
+SEEDVR2_MODULE_NAME = "_mediaforge_seedvr2_cli"
 SEEDVR2_DEPENDENCIES = (
     "cv2",
     "diffusers",
@@ -117,7 +117,7 @@ class SeedVR2UpscaleRunner:
     def _build_args(self, cli: ModuleType):
         arguments = [
             "inference_cli.py",
-            "__minimaxh3_upscale__.png",
+            "__mediaforge_upscale__.png",
             "--model_dir",
             str(self.settings.upscale_model_root.expanduser().resolve()),
             "--dit_model",

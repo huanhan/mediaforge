@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from minimaxh3_service.video_remove import extract_frames, propainter_command, validate_masks
+from mediaforge_service.video_remove import extract_frames, propainter_command, validate_masks
 
 
 def make_video(path, count=4):

@@ -8,15 +8,15 @@ from unittest.mock import Mock
 import pytest
 from pydantic import ValidationError
 
-from minimaxh3_service.backend import BackendError, OutputArtifact
-from minimaxh3_service.config import Settings
-from minimaxh3_service.continuation import continue_latent
-from minimaxh3_service.local_backend import LocalGenerationBackend
-from minimaxh3_service.media import (SegmentedMP4Writer, load_audio_window, load_video,
+from mediaforge_service.backend import BackendError, OutputArtifact
+from mediaforge_service.config import Settings
+from mediaforge_service.continuation import continue_latent
+from mediaforge_service.local_backend import LocalGenerationBackend
+from mediaforge_service.media import (SegmentedMP4Writer, load_audio_window, load_video,
                                      load_video_frames, save_mp4, video_duration)
-from minimaxh3_service.models import VideoEditRequest, GenerationRequest
-from minimaxh3_service.native import NativeH3Runner, _video_latent_t
-from minimaxh3_service.workflow import SegmentProgress, build_plan
+from mediaforge_service.models import VideoEditRequest, GenerationRequest
+from mediaforge_service.native import NativeH3Runner, _video_latent_t
+from mediaforge_service.workflow import SegmentProgress, build_plan
 
 
 @pytest.mark.parametrize("duration", [4, 4.5, 10, 10.01, 15, 60, 67.033008, 600])
@@ -142,8 +142,8 @@ def test_source_interval_resolved_before_queueing(tmp_path, monkeypatch):
         settings.model_paths["ref2va"].touch()
         backend = LocalGenerationBackend(settings, runner=SimpleNamespace(readiness=lambda: {"status": "ready"}))
         monkeypatch.setattr(backend.assets, "resolve_input", lambda _: tmp_path / "source.mp4")
-        monkeypatch.setattr("minimaxh3_service.local_backend.video_duration", lambda _: 67)
-        monkeypatch.setattr("minimaxh3_service.local_backend.video_dimensions", lambda _: (720, 1280))
+        monkeypatch.setattr("mediaforge_service.local_backend.video_duration", lambda _: 67)
+        monkeypatch.setattr("mediaforge_service.local_backend.video_dimensions", lambda _: (720, 1280))
         request = VideoEditRequest(prompt="change the actor", source_video={"file_id": "source.mp4", "start_seconds": 7},
                                     segmentation={"enabled": True})
         result = await backend.submit_edit(request)
@@ -170,7 +170,7 @@ def test_native_segment_loop_masks_trims_and_preserves_audio(tmp_path, monkeypat
     make_source(source)
     runner = NativeH3Runner(Settings(enable_acceleration_lora=False), lambda _: source)
     monkeypatch.setattr(runner, "_import_core", lambda: core)
-    monkeypatch.setattr("minimaxh3_service.native.h3_memory_scope", lambda *args: contextlib.nullcontext())
+    monkeypatch.setattr("mediaforge_service.native.h3_memory_scope", lambda *args: contextlib.nullcontext())
     requests, masks = [], []
 
     def conditioning(plan, **kwargs):
@@ -249,7 +249,7 @@ def test_native_sampler_passes_continuation_mask_to_core(tmp_path, monkeypatch):
 
 def test_http_segment_contract_progress_and_existing_endpoint(tmp_path):
     from starlette.testclient import TestClient
-    from minimaxh3_service.api import create_app
+    from mediaforge_service.api import create_app
 
     started, release = threading.Event(), threading.Event()
 
@@ -296,7 +296,7 @@ def test_http_segment_contract_progress_and_existing_endpoint(tmp_path):
     ((16, 16), (32, 32)), ((100000, 1), (8192, 32)),
 ])
 def test_automatic_edit_canvas(source, expected):
-    from minimaxh3_service.local_backend import source_canvas
+    from mediaforge_service.local_backend import source_canvas
     assert source_canvas(*source) == expected
 
 

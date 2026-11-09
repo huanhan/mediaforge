@@ -35,7 +35,7 @@ models/SEEDVR2/ema_vae_fp16.safetensors
 三、导入和启动
 在包含 TAR 文件和 compose.yaml 的目录打开终端，依次执行：
 
-docker load -i minimaxh3-{version}-linux-amd64.docker.tar
+docker load -i mediaforge-{version}-linux-amd64.docker.tar
 docker compose up -d --no-build --pull never
 
 然后在浏览器打开：

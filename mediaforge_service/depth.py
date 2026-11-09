@@ -47,7 +47,7 @@ class VideoDepthRunner:
         output.path.parent.mkdir(parents=True, exist_ok=True)
         raw = output.path.with_suffix(".npz")
         log = output.path.with_suffix(".log")
-        arguments = [sys.executable, "-m", "minimaxh3_service.depth_worker",
+        arguments = [sys.executable, "-m", "mediaforge_service.depth_worker",
                      "--source", str(source), "--output", str(output.path),
                      "--runtime", str(self.settings.depth_runtime_path.expanduser().resolve()),
                      "--model", str(self.settings.depth_model_path.expanduser().resolve()),
